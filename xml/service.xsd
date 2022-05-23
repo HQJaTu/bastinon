@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning"
+           vc:minVersion="1.1">
     <xs:element name="service" type="serviceType"/>
+    <xs:simpleType name="protocolType" final="restriction" >
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="tcp" />
+            <xs:enumeration value="udp" />
+            <xs:enumeration value="icmp" />
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="portNumberType" final="restriction" >
+        <xs:restriction base="xs:nonNegativeInteger">
+            <xs:minInclusive value="1"/>
+            <xs:maxInclusive value="65535"/>
+        </xs:restriction>
+    </xs:simpleType>
     <xs:complexType name="portType">
         <xs:simpleContent>
             <xs:extension base="xs:string">
-                <xs:attribute type="xs:string" name="protocol"/>
-                <xs:attribute type="xs:nonNegativeInteger" name="port"/>
+                <xs:attribute type="protocolType" name="protocol" use="required"/>
+                <xs:attribute type="portNumberType" name="port" use="required"/>
             </xs:extension>
         </xs:simpleContent>
     </xs:complexType>
