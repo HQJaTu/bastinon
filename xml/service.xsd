@@ -29,7 +29,7 @@
         <xs:sequence>
             <xs:element type="xs:string" name="short"/>
             <xs:element type="xs:string" name="description"/>
-            <xs:element type="portType" name="port"/>
+            <xs:element type="portType" name="port" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>
 </xs:schema>
