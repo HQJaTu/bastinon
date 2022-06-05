@@ -49,6 +49,7 @@
         <xs:simpleContent>
             <xs:extension base="xs:string">
                 <xs:attribute type="IPAddressOrNetwork" name="address" use="required"/>
+                <xs:attribute type="xs:dateTime" name="expires" use="optional"/>
             </xs:extension>
         </xs:simpleContent>
     </xs:complexType>
