@@ -24,7 +24,7 @@ import sys
 from typing import Optional, Tuple
 import argparse
 from firewall_updater.rules import RuleReader
-from firewall_updater import Iptables
+from firewall_updater import FirewallBase, Iptables
 import logging
 
 log = logging.getLogger(__name__)
@@ -47,12 +47,12 @@ def _setup_logger(log_level_in: str) -> None:
     lib_log.addHandler(console_handler)
 
 
-def read_rules_for_all_users(rule_path: str) -> None:
+def read_rules_for_all_users(rule_path: str, rule_engine: FirewallBase) -> None:
     reader = RuleReader(rule_path)
     rules = reader.read_all_users()
 
-    firewall = Iptables("Friends-Firewall-INPUT")
-    firewall.simulate(rules)
+    # Test the newly read rules
+    rule_engine.simulate(rules)
 
 
 def read_rules_for_user(rule_path: str, user: str):
@@ -74,7 +74,8 @@ def main() -> None:
 
     log.info('Starting up ...')
 
-    read_rules_for_all_users(args.rule_path)
+    iptables_firewall = Iptables("Friends-Firewall-INPUT")
+    read_rules_for_all_users(args.rule_path, iptables_firewall)
 
 
 if __name__ == "__main__":

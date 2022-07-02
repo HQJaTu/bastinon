@@ -93,7 +93,8 @@ class RuleReader:
         schema_doc = etree.parse(schema_filename)
         schema = etree.XMLSchema(schema_doc)
         if not schema.validate(root):
-            raise ValueError("Rule-XML {} is not valid! Error: {}".format(user_rules_filename, schema.error_log))
+            raise ValueError("Rule-XML {} is not valid according to XSD file {}! Error: {}".format(
+                user_rules_filename, schema_filename, schema.error_log))
 
         rules = []
         for zone_elem in root.iter(tag="zone"):
