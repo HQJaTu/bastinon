@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<user xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/HQJaTu/firewall-updater/master/xml/user_rule.xsd">
+    <zone>
+        <source address="192.0.2.0/24"/>
+        <source address="198.51.100.0/24"/>
+        <source address="2001:db8::/32"/>
+        <source address="203.0.113.15/32" expires="2022-07-01T05:20:00"/>
+        <service name="ssh"/>
+    </zone>
+    <zone>
+        <source address="198.51.100.0/24"/>
+        <service name="imaps"/>
+    </zone>
+</user>

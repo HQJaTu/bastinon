@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/HQJaTu/firewall-updater/master/xml/service.xsd">
+    <short>IMAP over SSL</short>
+    <description>The Internet Message Access Protocol over SSL (IMAPs) allows a local client to access email on a remote server in a secure way. If you plan to provide a IMAP over SSL service (e.g. with dovecot), enable this option.</description>
+    <port protocol="tcp" port="993"/>
+</service>

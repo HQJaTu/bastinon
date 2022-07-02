@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/HQJaTu/firewall-updater/master/xml/service.xsd">
+    <short>DNS</short>
+    <description>The Domain Name System (DNS) is used to provide and request host and domain names. Enable this option, if you plan to provide a domain name service (e.g. with bind).</description>
+    <port protocol="tcp" port="53"/>
+    <port protocol="udp" port="53"/>
+</service>
