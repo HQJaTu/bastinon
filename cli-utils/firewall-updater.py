@@ -47,8 +47,8 @@ def _setup_logger(log_level_in: str) -> None:
     lib_log.addHandler(console_handler)
 
 
-def read_rules_for_all_users(rule_path: str, rule_engine: FirewallBase) -> None:
-    reader = RuleReader(rule_path)
+def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None:
+    reader = RuleReader(rules_path)
     rules = reader.read_all_users()
 
     # Test the newly read rules
@@ -75,7 +75,7 @@ def main() -> None:
     log.info('Starting up ...')
 
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
-    read_rules_for_all_users(args.rule_path, iptables_firewall)
+    read_rules_for_all_users(iptables_firewall, args.rule_path)
 
 
 if __name__ == "__main__":
