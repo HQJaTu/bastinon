@@ -22,6 +22,7 @@ from typing import Union, Tuple
 from dbus import (SessionBus, SystemBus, service, mainloop)
 from pwd import getpwuid
 from ..base.firewall_base import FirewallBase
+from ..rules import RuleReader
 import logging
 
 log = logging.getLogger(__name__)
@@ -37,7 +38,8 @@ class FirewallUpdaterService(service.Object):
 
     def __init__(self, use_system_bus: bool,
                  loop: mainloop.NativeMainLoop,
-                 firewall: FirewallBase):
+                 firewall: FirewallBase,
+                 firewall_rules_path: str):
         # Which bus to use for publishing?
         self._use_system_bus = use_system_bus
         if use_system_bus:
@@ -55,6 +57,7 @@ class FirewallUpdaterService(service.Object):
 
         self._loop = loop
         self._firewall = firewall
+        self._firewall_rules_path = firewall_rules_path
 
     def _get_user_info(self) -> Tuple[int, str]:
         unix_user_id = self.connection.get_unix_user(FIREWALL_UPDATER_SERVICE_BUS_NAME)
@@ -106,7 +109,7 @@ class FirewallUpdaterService(service.Object):
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
                     in_signature="s", out_signature="s")
-    def GetRules(self) -> list:
+    def GetRules(self, test: str) -> str:
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
@@ -118,6 +121,9 @@ class FirewallUpdaterService(service.Object):
 
         # Get details of user ID making the request
         user_id, user_name = self._get_user_info()
+
+        reader = RuleReader(self._firewall_rules_path)
+        rules = reader.read_all_users()
 
         rules = self._firewall.query(user_id)
         log.info("Done reporting")
