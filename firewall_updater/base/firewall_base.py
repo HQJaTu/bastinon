@@ -18,6 +18,7 @@
 # Copyright (c) Jari Turkia
 
 from abc import ABC, abstractmethod
+from typing import Tuple
 import logging
 
 log = logging.getLogger(__name__)
@@ -34,5 +35,5 @@ class FirewallBase(ABC):
         pass
 
     @abstractmethod
-    def simulate(self, rules: list) -> list:
+    def simulate(self, rules: list, print_rules: bool) -> Tuple[list, list]:
         pass

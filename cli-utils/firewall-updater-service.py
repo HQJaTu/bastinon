@@ -115,15 +115,17 @@ def daemon(use_system_bus: bool, firewall: FirewallBase, firewall_rules_path: st
             # Sets a function to be called at regular intervals with the default priority, G_PRIORITY_DEFAULT.
             # https://docs.gtk.org/glib/func.timeout_add_seconds.html
             log.debug("Systemd Watchdog enabled")
-            # watchdog_task = asyncio.create_task(_systemd_watchdog_keepalive(watchdog_time))
             wd.ready()
             periodic_job = Periodic(watchdog_time, _systemd_watchdog_keepalive)
         else:
             log.info("Systemd Watchdog not enabled")
-            # watchdog_task = asyncio.create_task(_systemd_mock_watchdog(watchdog_time))
-            periodic_job = Periodic(watchdog_time, _systemd_mock_watchdog)
+            if False:
+                periodic_job = Periodic(watchdog_time, _systemd_mock_watchdog)
+            else:
+                periodic_job = None
 
-        await periodic_job.start()
+        if periodic_job:
+            await periodic_job.start()
         cancellation_task = asyncio_loop.create_task(cancel_event.wait())
         # Ok, in this wait() there is only single task. It's just there _could_ be more.
         while not cancel_event.is_set():

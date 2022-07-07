@@ -47,23 +47,30 @@ class Iptables(FirewallBase):
     def set(self, rules: list) -> list:
         raise NotImplementedError("Set IPtables rules not implemented yet!")
 
-    def simulate(self, rules: list) -> list:
-        rules_out = []
-        print("IPv4 rules:")
+    def simulate(self, rules: list, print_rules: bool) -> Tuple[list, list]:
+        rules_out_4 = []
+        if print_rules:
+            print("IPv4 rules:")
         for rule in rules:
             rule_out = self._rule_to_ipchain(4, rule)
             if rule_out:
                 rule_str = ' '.join(str(r) for r in rule_out)
-                rules_out.append(rule_str)
-                print(rule_str)
+                rules_out_4.append(rule_str)
+                if print_rules:
+                    print(rule_str)
 
-        print("IPv6 rules:")
+        rules_out_6 = []
+        if print_rules:
+            print("IPv6 rules:")
         for rule in rules:
             rule_out = self._rule_to_ipchain(6, rule)
             if rule_out:
                 rule_str = ' '.join(str(r) for r in rule_out)
-                rules_out.append(rule_str)
-                print(rule_str)
+                rules_out_6.append(rule_str)
+                if print_rules:
+                    print(rule_str)
+
+        return rules_out_4, rules_out_6
 
     def _clear_chain(self):
         return

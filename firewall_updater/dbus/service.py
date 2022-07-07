@@ -108,24 +108,24 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="s")
-    def GetRules(self, test: str) -> str:
+                    in_signature="s", out_signature="as")
+    def GetRules(self, user: str) -> list:
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
         Signature docs:
         https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
-        :param filename, str, filename of spam mail in RFC822 format
-        :return: str, constant "ok"
+        :param user, str, optional user to limit firewall rules into
+        :return: list of str, firewall rules
         """
-
-        # Get details of user ID making the request
-        user_id, user_name = self._get_user_info()
 
         reader = RuleReader(self._firewall_rules_path)
         rules = reader.read_all_users()
 
-        rules = self._firewall.query(user_id)
-        log.info("Done reporting")
+        # Test the newly read rules
+        rules_4, rules_6 = self._firewall.simulate(rules, print_rules=False)
+        rules_out = rules_4 + rules_6
 
-        return "ok"
+        log.info("Returning list of {} firewall rules".format(len(rules_out)))
+
+        return rules_out

@@ -52,7 +52,7 @@ def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None
     rules = reader.read_all_users()
 
     # Test the newly read rules
-    rule_engine.simulate(rules)
+    rule_engine.simulate(rules, print_rules=True)
 
 
 def read_rules_for_user(rule_path: str, user: str):
