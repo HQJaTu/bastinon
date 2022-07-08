@@ -18,7 +18,7 @@
 # Copyright (c) Jari Turkia
 
 import os
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 from dbus import (SessionBus, SystemBus, service, mainloop)
 from pwd import getpwuid
 from ..base.firewall_base import FirewallBase
@@ -116,7 +116,7 @@ class FirewallUpdaterService(service.Object):
         Signature docs:
         https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
         :param user, str, optional user to limit firewall rules into
-        :return: list of str, firewall rules
+        :return: list of str, firewall saved rules
         """
 
         reader = RuleReader(self._firewall_rules_path)
@@ -125,6 +125,26 @@ class FirewallUpdaterService(service.Object):
         # Test the newly read rules
         rules_4, rules_6 = self._firewall.simulate(rules, print_rules=False)
         rules_out = rules_4 + rules_6
+
+        log.info("Returning list of {} firewall rules".format(len(rules_out)))
+
+        return rules_out
+
+    # noinspection PyPep8Naming
+    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
+                    in_signature="s", out_signature="a(sis)")
+    def GetActiveRules(self, user: str) -> List[Tuple[str, int, str]]:
+        """
+        Method docs:
+        https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
+        Signature docs:
+        https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
+        :param user, str, optional user to limit firewall rules into
+        :return: list of str, firewall active rules
+        """
+
+        # Test the newly read rules
+        rules_out = self._firewall.query()
 
         log.info("Returning list of {} firewall rules".format(len(rules_out)))
 

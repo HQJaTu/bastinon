@@ -17,11 +17,14 @@
 #
 # Copyright (c) Jari Turkia
 
+import io
 import subprocess
 import shutil
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, List
 import ipaddress
+import re
 from .base import FirewallBase
+from .rules import ServiceReader
 import logging
 
 log = logging.getLogger(__name__)
@@ -41,10 +44,12 @@ class Iptables(FirewallBase):
             raise ValueError("Cannot find exact location of iptables-command! Failing to continue.")
         self._ip6tables_cmd = shutil.which("ip6tables")
 
-    def query(self) -> list:
-        raise NotImplementedError("Get IPtables rules not implemented yet!")
+    def query(self) -> List[Tuple[str, int, str]]:
+        active_rules = self._read_chain()
 
-    def set(self, rules: list) -> list:
+        return active_rules
+
+    def set(self, rules: List[Tuple[str, int, str]]) -> list:
         raise NotImplementedError("Set IPtables rules not implemented yet!")
 
     def simulate(self, rules: list, print_rules: bool) -> Tuple[list, list]:
@@ -78,6 +83,84 @@ class Iptables(FirewallBase):
             [self._iptables_cmd, "-A", self._chain, "-p", "tcp", "-m", "tcp", "--dport", "22", "-j", "ACCEPT"],
             stdout=subprocess.PIPE)
         output, err = p.communicate()
+
+    def _read_chain(self) -> List[Tuple[str, int, str]]:
+        # Note!
+        # iptables-command can be run only as root
+        p = subprocess.Popen(
+            [self._iptables_cmd, "-n", "--line-numbers", "-L", self._chain],
+            stdout=subprocess.PIPE)
+        output, err = p.communicate()
+        if p.returncode != 0:
+            raise RuntimeError("Failed to query for IPtables rules.")
+
+        """
+Chain Example-Chain-INPUT (1 references)
+num  target     prot opt source               destination
+1    ACCEPT     tcp  --  192.0.2.0/24         0.0.0.0/0            tcp dpt:22
+2    ACCEPT     tcp  --  198.51.100.0/24      0.0.0.0/0            tcp dpt:993
+        """
+
+        # print(output)
+        line_nro = 0
+        rules_out = []
+        for line in io.StringIO(output.decode('UTF-8')):
+            line_nro += 1
+            if line_nro == 1:
+                # First line contains chain name
+                match = re.search('^Chain\s+(\S+)\s+', line)
+                if not match:
+                    raise ValueError("IPchain output error! First line cannot be parsed: '{}'".format(line.strip()))
+
+                chain_name = match.group(1)
+                if chain_name != self._chain:
+                    raise ValueError("IPchain output error! Attempt to query for chain '{}' failed, "
+                                     "got: '{}'".format(self._chain, line.strip()))
+
+                continue
+            elif line_nro == 2:
+                # Skip header row
+                continue
+
+            # Regular rows
+            #                     1:      2:      3:      4:      5:      6:      7:
+            match = re.search(r'^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)', line.rstrip())
+            if not match:
+                raise ValueError("IPchain output error! Rule cannot be parsed: '{}'".format(line.strip()))
+
+            rule_num = int(match.group(1))
+            destination_chain = match.group(2)
+            proto = match.group(3)
+            options = match.group(4)
+            source_addr = match.group(5)
+            destination_addr = match.group(6)
+            destination = match.group(7)
+
+            #print(line)
+            if destination_chain != "ACCEPT":
+                raise ValueError("IPchain output error! Rule isn't an ACCEPT-rule, "
+                                 "is a '{}', rule: '{}'".format(destination_chain, line.strip()))
+            if proto not in ServiceReader.PROTOCOLS:
+                raise ValueError("IPchain output error! Rule has unsupported proto '{}', "
+                                 "rule: '{}'".format(proto, line.strip()))
+            if options != "--":
+                raise ValueError("IPchain output error! Options is rules not supported, "
+                                 "rule: '{}'".format(line.strip()))
+
+            # Parse destination, it contains all possible options of iptables-rule
+            port = None
+            match = re.search(r'^\w+\s+dpt:(\d+)$', destination)
+            if not match:
+                raise ValueError("IPchain output error! Rule destination needs to be a simple port definition, "
+                                 "rule: '{}'".format(line.strip()))
+            port = int(match.group(1))
+
+            # XXX Debug noise:
+            #log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
+            rule_out = (proto, port, source_addr)
+            rules_out.append(rule_out)
+
+        return rules_out
 
     def _rule_to_ipchain(self, proto_ver: int, rule: Tuple[str, int, str]) -> Union[list, None]:
         proto = rule[0]

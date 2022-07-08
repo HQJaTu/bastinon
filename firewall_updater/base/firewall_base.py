@@ -18,7 +18,7 @@
 # Copyright (c) Jari Turkia
 
 from abc import ABC, abstractmethod
-from typing import Tuple
+from typing import Tuple, List
 import logging
 
 log = logging.getLogger(__name__)
@@ -27,11 +27,11 @@ log = logging.getLogger(__name__)
 class FirewallBase(ABC):
 
     @abstractmethod
-    def query(self) -> list:
+    def query(self) -> List[Tuple[str, int, str]]:
         pass
 
     @abstractmethod
-    def set(self, rules: list) -> list:
+    def set(self, rules: List[Tuple[str, int, str]]) -> list:
         pass
 
     @abstractmethod

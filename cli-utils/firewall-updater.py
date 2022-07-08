@@ -48,11 +48,16 @@ def _setup_logger(log_level_in: str) -> None:
 
 
 def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None:
-    reader = RuleReader(rules_path)
-    rules = reader.read_all_users()
+    if False:
+        reader = RuleReader(rules_path)
+        rules = reader.read_all_users()
 
-    # Test the newly read rules
-    rule_engine.simulate(rules, print_rules=True)
+        # Test the newly read rules
+        log.info("Simulated rules:")
+        rule_engine.simulate(rules, print_rules=True)
+
+    log.info("Active rules:")
+    rule_engine.query()
 
 
 def read_rules_for_user(rule_path: str, user: str):
