@@ -48,21 +48,17 @@ def _setup_logger(log_level_in: str) -> None:
 
 
 def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None:
-    if False:
-        reader = RuleReader(rules_path)
-        rules = reader.read_all_users()
+    reader = RuleReader(rules_path)
+    rules = reader.read_all_users()
 
-        # Test the newly read rules
-        log.info("Simulated rules:")
-        rule_engine.simulate(rules, print_rules=True)
+    # Test the newly read rules
+    log.info("Simulated rules:")
+    rule_engine.simulate(rules, print_rules=True)
 
+
+def read_active_rules_from_firewall(rule_engine: FirewallBase) -> None:
     log.info("Active rules:")
     rule_engine.query()
-
-
-def read_rules_for_user(rule_path: str, user: str):
-    reader = RuleReader(rule_path)
-    rules = reader.read(user)
 
 
 def main() -> None:
@@ -81,6 +77,7 @@ def main() -> None:
 
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
     read_rules_for_all_users(iptables_firewall, args.rule_path)
+    #read_active_rules_from_firewall(iptables_firewall)
 
 
 if __name__ == "__main__":

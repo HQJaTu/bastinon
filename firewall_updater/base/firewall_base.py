@@ -18,7 +18,8 @@
 # Copyright (c) Jari Turkia
 
 from abc import ABC, abstractmethod
-from typing import Tuple, List
+from typing import Tuple, List, Union
+from datetime import datetime
 import logging
 
 log = logging.getLogger(__name__)
@@ -35,5 +36,7 @@ class FirewallBase(ABC):
         pass
 
     @abstractmethod
-    def simulate(self, rules: list, print_rules: bool) -> Tuple[list, list]:
+    def simulate(self, rules: List[Tuple[str, int, str, Union[datetime, None]]], print_rules: bool) -> Tuple[
+        List[str], List[str]
+    ]:
         pass

@@ -19,8 +19,10 @@
 
 import os
 import sys
+from typing import List, Tuple, Union
 from lxml import etree
 from pwd import getpwnam
+from datetime import datetime
 from .service_reader import ServiceReader
 import logging
 
@@ -86,7 +88,9 @@ class RuleReader:
         return rules
 
     @staticmethod
-    def _user_rule_reader(user: str, user_rules_filename: str, services: dict) -> list:
+    def _user_rule_reader(user: str, user_rules_filename: str, services: dict) -> List[
+        Tuple[str, int, str, Union[datetime, None]]
+    ]:
         log.debug("For user {}, reading rule file: {}".format(user, user_rules_filename))
         root = etree.parse(user_rules_filename)
         schema_filename = "{}/xml-schemas/user_rule.xsd".format(sys.prefix)
@@ -111,9 +115,18 @@ class RuleReader:
                     if 'address' not in source_elem.attrib:
                         raise ValueError('Rule definition, service needs to have name! User: {}'.format(user))
                     address = source_elem.attrib['address']
+                    if 'expires' in source_elem.attrib:
+                        expiry = datetime.strptime(source_elem.attrib['expires'], "%Y-%m-%dT%H:%M:%S")
+                        log.debug("Service '{}' source rule '{}' expiry: {}".format(
+                            service_name,
+                            etree.tostring(source_elem).decode('utf-8').rstrip(),
+                            expiry
+                        ))
+                    else:
+                        expiry = None
 
                     for service_def in service:
-                        rule = (service_def[0], service_def[1], address)
+                        rule = (service_def[0], service_def[1], address, expiry)
                         rules.append(rule)
 
         return rules

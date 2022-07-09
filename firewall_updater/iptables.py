@@ -23,6 +23,7 @@ import shutil
 from typing import Tuple, Optional, Union, List
 import ipaddress
 import re
+from datetime import datetime
 from .base import FirewallBase
 from .rules import ServiceReader
 import logging
@@ -52,14 +53,22 @@ class Iptables(FirewallBase):
     def set(self, rules: List[Tuple[str, int, str]]) -> list:
         raise NotImplementedError("Set IPtables rules not implemented yet!")
 
-    def simulate(self, rules: list, print_rules: bool) -> Tuple[list, list]:
+    def simulate(self, rules: List[Tuple[str, int, str, Union[datetime, None]]], print_rules: bool) -> Tuple[
+        List[str], List[str]
+    ]:
+        now = datetime.utcnow()
         rules_out_4 = []
         if print_rules:
             print("IPv4 rules:")
         for rule in rules:
             rule_out = self._rule_to_ipchain(4, rule)
             if rule_out:
-                rule_str = ' '.join(str(r) for r in rule_out)
+                rule_str = ""
+                if rule[3] and now > rule[3]:
+                    # Ah. Expired already.
+                    rule_str = "# "
+
+                rule_str += ' '.join(str(r) for r in rule_out)
                 rules_out_4.append(rule_str)
                 if print_rules:
                     print(rule_str)
@@ -70,12 +79,20 @@ class Iptables(FirewallBase):
         for rule in rules:
             rule_out = self._rule_to_ipchain(6, rule)
             if rule_out:
-                rule_str = ' '.join(str(r) for r in rule_out)
+                rule_str = ""
+                if rule[3] and rule[3] > now:
+                    # Ah. Expired already.
+                    rule_str = "# "
+
+                rule_str += ' '.join(str(r) for r in rule_out)
                 rules_out_6.append(rule_str)
                 if print_rules:
                     print(rule_str)
 
         return rules_out_4, rules_out_6
+
+    def needs_update(self) -> bool:
+        active_rules = self._read_chain()
 
     def _clear_chain(self):
         return
@@ -136,7 +153,6 @@ num  target     prot opt source               destination
             destination_addr = match.group(6)
             destination = match.group(7)
 
-            #print(line)
             if destination_chain != "ACCEPT":
                 raise ValueError("IPchain output error! Rule isn't an ACCEPT-rule, "
                                  "is a '{}', rule: '{}'".format(destination_chain, line.strip()))
@@ -156,7 +172,7 @@ num  target     prot opt source               destination
             port = int(match.group(1))
 
             # XXX Debug noise:
-            #log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
+            # log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
             rule_out = (proto, port, source_addr)
             rules_out.append(rule_out)
 
