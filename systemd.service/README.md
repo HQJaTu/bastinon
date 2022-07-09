@@ -81,6 +81,6 @@ dbus-send \
   --system \
   --print-reply \
   --type=method_call \
-  --dest=--dest=fi.hqcodeshop.Firewall \
-  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.ReportFile "string:-FILENAME-HERE-"
+  --dest=fi.hqcodeshop.Firewall \
+  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetRules "string:-FILENAME-HERE-"
 ```
