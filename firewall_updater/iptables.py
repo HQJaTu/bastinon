@@ -44,11 +44,21 @@ class Iptables(FirewallBase):
         if not self._iptables_cmd:
             raise ValueError("Cannot find exact location of iptables-command! Failing to continue.")
         self._ip6tables_cmd = shutil.which("ip6tables")
+        if not self._ip6tables_cmd:
+            raise ValueError("Cannot find exact location of ip6tables-command! Failing to continue.")
 
     def query(self) -> List[Tuple[str, int, str]]:
-        active_rules = self._read_chain()
+        active_v4_rules = self._read_chain(4)
+        active_v6_rules = self._read_chain(6)
 
-        return active_rules
+        rules_out = []
+        if active_v4_rules:
+            rules_out = active_v4_rules
+
+        if active_v6_rules:
+            rules_out.extend(active_v6_rules)
+
+        return rules_out
 
     def set(self, rules: List[Tuple[str, int, str]]) -> list:
         raise NotImplementedError("Set IPtables rules not implemented yet!")
@@ -91,8 +101,8 @@ class Iptables(FirewallBase):
 
         return rules_out_4, rules_out_6
 
-    def needs_update(self) -> bool:
-        active_rules = self._read_chain()
+    def needs_update(self, rules: List[Tuple[str, int, str, Union[datetime, None]]]) -> bool:
+        active_ipv4_rules = self._read_chain()
 
     def _clear_chain(self):
         return
@@ -101,11 +111,18 @@ class Iptables(FirewallBase):
             stdout=subprocess.PIPE)
         output, err = p.communicate()
 
-    def _read_chain(self) -> List[Tuple[str, int, str]]:
+    def _read_chain(self, ip_version: int) -> List[Tuple[str, int, str]]:
+        if ip_version == 4:
+            command_to_run = self._iptables_cmd
+        elif ip_version == 6:
+            command_to_run = self._ip6tables_cmd
+        else:
+            raise ValueError("IP-version needs to be 4 or 6!")
+
         # Note!
         # iptables-command can be run only as root
         p = subprocess.Popen(
-            [self._iptables_cmd, "-n", "--line-numbers", "-L", self._chain],
+            [command_to_run, "-n", "--line-numbers", "-L", self._chain],
             stdout=subprocess.PIPE)
         output, err = p.communicate()
         if p.returncode != 0:
@@ -118,7 +135,6 @@ num  target     prot opt source               destination
 2    ACCEPT     tcp  --  198.51.100.0/24      0.0.0.0/0            tcp dpt:993
         """
 
-        # print(output)
         line_nro = 0
         rules_out = []
         for line in io.StringIO(output.decode('UTF-8')):

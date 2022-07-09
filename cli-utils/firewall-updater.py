@@ -58,7 +58,10 @@ def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None
 
 def read_active_rules_from_firewall(rule_engine: FirewallBase) -> None:
     log.info("Active rules:")
-    rule_engine.query()
+    rules = rule_engine.query()
+
+    from pprint import pprint
+    pprint(rules)
 
 
 def main() -> None:
@@ -76,8 +79,8 @@ def main() -> None:
     log.info('Starting up ...')
 
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
-    read_rules_for_all_users(iptables_firewall, args.rule_path)
-    #read_active_rules_from_firewall(iptables_firewall)
+    # read_rules_for_all_users(iptables_firewall, args.rule_path)
+    read_active_rules_from_firewall(iptables_firewall)
 
 
 if __name__ == "__main__":
