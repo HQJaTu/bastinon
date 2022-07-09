@@ -20,6 +20,7 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Union
 from datetime import datetime
+from ..rules import Rule
 import logging
 
 log = logging.getLogger(__name__)
@@ -36,12 +37,9 @@ class FirewallBase(ABC):
         pass
 
     @abstractmethod
-    def simulate(self, rules: List[Tuple[str, int, str, Union[datetime, None], Union[str, None]]],
-                 print_rules: bool) -> Tuple[
-        List[str], List[str]
-    ]:
+    def simulate(self, rules: List[Rule], print_rules: bool) -> Tuple[List[str], List[str]]:
         pass
 
     @abstractmethod
-    def needs_update(self, rules: List[Tuple[str, int, str, Union[datetime, None], Union[str, None]]]) -> bool:
+    def needs_update(self, rules: List[Rule]) -> bool:
         pass

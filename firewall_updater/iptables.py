@@ -21,20 +21,16 @@ import io
 import subprocess
 import shutil
 from typing import Tuple, Optional, Union, List
-import ipaddress
 import re
 from datetime import datetime
 from .base import FirewallBase
-from .rules import ServiceReader
+from .rules import ServiceReader, Rule
 import logging
 
 log = logging.getLogger(__name__)
 
 
 class Iptables(FirewallBase):
-    PROTO_TCP = r"tcp"
-    PROTO_UDP = r"udp"
-    PROTOS = [PROTO_TCP, PROTO_UDP]
 
     def __init__(self, chain_name: str):
         if not chain_name:
@@ -63,10 +59,7 @@ class Iptables(FirewallBase):
     def set(self, rules: List[Tuple[str, int, str]]) -> list:
         raise NotImplementedError("Set IPtables rules not implemented yet!")
 
-    def simulate(self, rules: List[Tuple[str, int, str, Union[datetime, None], Union[str, None]]],
-                 print_rules: bool) -> Tuple[
-        List[str], List[str]
-    ]:
+    def simulate(self, rules: List[Rule], print_rules: bool) -> Tuple[List[str], List[str]]:
         rules_out_4 = []
         if print_rules:
             print("IPv4 rules:")
@@ -101,11 +94,11 @@ class Iptables(FirewallBase):
 
         return rules_out_4, rules_out_6
 
-    def needs_update(self, rules: List[Tuple[str, int, str, Union[datetime, None], Union[str, None]]]) -> bool:
+    def needs_update(self, rules: List[Rule]) -> bool:
         now = datetime.utcnow()
         matched_rules = {}
         for idx, rule in enumerate(rules):
-            if rule[3] and rule[3] > now:
+            if rule.has_expired():
                 # Ah. Expired already. We won't be needing this rule in active ones.
                 continue
 
@@ -121,7 +114,7 @@ class Iptables(FirewallBase):
                 # 1) Proto
                 # 2) Port
                 # 3) Source address
-                if active_rule[1] == rule[0] and active_rule[2] == rule[1] and active_rule[3] == rule[2]:
+                if rule.matches(active_rule[1], active_rule[2], active_rule[3]):
                     # Found match!
                     log.debug("Matched rule: '{}'!".format(rule))
                     matched_rules[idx] = True
@@ -229,48 +222,18 @@ num  target     prot opt source               destination
 
         return rules_out
 
-    def _rule_to_ipchain(self, proto_ver: int,
-                         rule: Tuple[str, int, str, Union[datetime, None], Union[str, None]]) -> \
-            Tuple[Union[bool, None], Union[list, None]]:
-        proto = rule[0]
-        port = rule[1]
-        source = rule[2]
-        expiry = rule[3]
-        comment = rule[4]
-
-        # Sanity: We only know protocols TCP and UDP
-        if proto not in self.PROTOS:
-            raise ValueError("Rule has unknown protocol '{}'!".format(proto))
-
+    def _rule_to_ipchain(self, proto_ver: int, rule: Rule) -> Tuple[Union[bool, None], Union[list, None]]:
         # Sanity: IPv4 or IPv6 address
-        try:
-            source_parsed = ipaddress.ip_address(source)
-        except ValueError:
-            try:
-                source_parsed = ipaddress.ip_network(source)
-            except ValueError:
-                raise ValueError("Rule has really weird source definition '{}'!".format(source))
-
-        if isinstance(source_parsed, ipaddress.IPv4Address) or isinstance(source_parsed, ipaddress.IPv4Network):
-            # IPv4
-            if proto_ver != 4:
-                return None, None
-        if isinstance(source_parsed, ipaddress.IPv6Address) or isinstance(source_parsed, ipaddress.IPv6Network):
-            # IPv6
-            if proto_ver != 6:
-                return None, None
+        if rule.source_address_family != proto_ver:
+            return None, None
 
         # Output
         ipchain_rule = [
-            "-A", self._chain, "-p", proto, "-m", proto, "--source", source, "--dport", port, "-j", "ACCEPT"
+            "-A", self._chain, "-p", rule.proto, "-m", rule.proto, "--source", rule.source, "--dport", rule.port, "-j", "ACCEPT"
         ]
-        if comment:
-            ipchain_rule.extend(["--comment", '"{}"'.format(comment)])
+        if rule.comment:
+            ipchain_rule.extend(["--comment", '"{}"'.format(rule.comment)])
 
         expired = False
-        if expiry:
-            now = datetime.utcnow()
-            if now > expiry:
-                expired = True
 
         return expired, ipchain_rule
