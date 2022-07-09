@@ -89,7 +89,7 @@ class RuleReader:
 
     @staticmethod
     def _user_rule_reader(user: str, user_rules_filename: str, services: dict) -> List[
-        Tuple[str, int, str, Union[datetime, None]]
+        Tuple[str, int, str, Union[datetime, None], Union[str, None]]
     ]:
         log.debug("For user {}, reading rule file: {}".format(user, user_rules_filename))
         root = etree.parse(user_rules_filename)
@@ -117,16 +117,22 @@ class RuleReader:
                     address = source_elem.attrib['address']
                     if 'expires' in source_elem.attrib:
                         expiry = datetime.strptime(source_elem.attrib['expires'], "%Y-%m-%dT%H:%M:%S")
-                        log.debug("Service '{}' source rule '{}' expiry: {}".format(
-                            service_name,
-                            etree.tostring(source_elem).decode('utf-8').rstrip(),
-                            expiry
-                        ))
+                        if False:
+                            log.debug("Service '{}' source rule '{}' expiry: {}".format(
+                                service_name,
+                                etree.tostring(source_elem).decode('utf-8').rstrip(),
+                                expiry
+                            ))
                     else:
                         expiry = None
 
+                    if 'comment' in source_elem.attrib:
+                        comment = source_elem.attrib['comment']
+                    else:
+                        comment = None
+
                     for service_def in service:
-                        rule = (service_def[0], service_def[1], address, expiry)
+                        rule = (service_def[0], service_def[1], address, expiry, comment)
                         rules.append(rule)
 
         return rules

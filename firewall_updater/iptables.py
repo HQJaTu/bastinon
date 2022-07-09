@@ -53,28 +53,28 @@ class Iptables(FirewallBase):
 
         rules_out = []
         if active_v4_rules:
-            rules_out = active_v4_rules
+            rules_out = [(r[1], r[2], r[3]) for r in active_v4_rules]
 
         if active_v6_rules:
-            rules_out.extend(active_v6_rules)
+            rules_out.extend([(r[1], r[2], r[3]) for r in active_v6_rules])
 
         return rules_out
 
     def set(self, rules: List[Tuple[str, int, str]]) -> list:
         raise NotImplementedError("Set IPtables rules not implemented yet!")
 
-    def simulate(self, rules: List[Tuple[str, int, str, Union[datetime, None]]], print_rules: bool) -> Tuple[
+    def simulate(self, rules: List[Tuple[str, int, str, Union[datetime, None], Union[str, None]]],
+                 print_rules: bool) -> Tuple[
         List[str], List[str]
     ]:
-        now = datetime.utcnow()
         rules_out_4 = []
         if print_rules:
             print("IPv4 rules:")
         for rule in rules:
-            rule_out = self._rule_to_ipchain(4, rule)
+            expired, rule_out = self._rule_to_ipchain(4, rule)
             if rule_out:
                 rule_str = ""
-                if rule[3] and now > rule[3]:
+                if expired:
                     # Ah. Expired already.
                     rule_str = "# "
 
@@ -87,10 +87,10 @@ class Iptables(FirewallBase):
         if print_rules:
             print("IPv6 rules:")
         for rule in rules:
-            rule_out = self._rule_to_ipchain(6, rule)
+            expired, rule_out = self._rule_to_ipchain(6, rule)
             if rule_out:
                 rule_str = ""
-                if rule[3] and rule[3] > now:
+                if expired:
                     # Ah. Expired already.
                     rule_str = "# "
 
@@ -101,7 +101,7 @@ class Iptables(FirewallBase):
 
         return rules_out_4, rules_out_6
 
-    def needs_update(self, rules: List[Tuple[str, int, str, Union[datetime, None]]]) -> bool:
+    def needs_update(self, rules: List[Tuple[str, int, str, Union[datetime, None], Union[str, None]]]) -> bool:
         now = datetime.utcnow()
         matched_rules = {}
         for idx, rule in enumerate(rules):
@@ -117,7 +117,11 @@ class Iptables(FirewallBase):
             # Search for this active rule in set of user-rules
             found_it = False
             for idx, rule in enumerate(rules):
-                if active_rule[0] == rule[0] and active_rule[1] == rule[1] and active_rule[2] == rule[2]:
+                # Match:
+                # 1) Proto
+                # 2) Port
+                # 3) Source address
+                if active_rule[1] == rule[0] and active_rule[2] == rule[1] and active_rule[3] == rule[2]:
                     # Found match!
                     log.debug("Matched rule: '{}'!".format(rule))
                     matched_rules[idx] = True
@@ -133,7 +137,7 @@ class Iptables(FirewallBase):
             len(matched_rules), matches_found, len(ipv4_rules_to_remove)
         ))
 
-        return matches_found == len(matched_rules)
+        return matches_found != len(matched_rules)
 
     def _clear_chain(self):
         return
@@ -142,7 +146,7 @@ class Iptables(FirewallBase):
             stdout=subprocess.PIPE)
         output, err = p.communicate()
 
-    def _read_chain(self, ip_version: int) -> List[Tuple[str, int, str]]:
+    def _read_chain(self, ip_version: int) -> List[Tuple[int, str, int, str]]:
         if ip_version == 4:
             command_to_run = self._iptables_cmd
         elif ip_version == 6:
@@ -220,15 +224,19 @@ num  target     prot opt source               destination
 
             # XXX Debug noise:
             # log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
-            rule_out = (proto, port, source_addr)
+            rule_out = (rule_num, proto, port, source_addr)
             rules_out.append(rule_out)
 
         return rules_out
 
-    def _rule_to_ipchain(self, proto_ver: int, rule: Tuple[str, int, str]) -> Union[list, None]:
+    def _rule_to_ipchain(self, proto_ver: int,
+                         rule: Tuple[str, int, str, Union[datetime, None], Union[str, None]]) -> \
+            Tuple[Union[bool, None], Union[list, None]]:
         proto = rule[0]
         port = rule[1]
         source = rule[2]
+        expiry = rule[3]
+        comment = rule[4]
 
         # Sanity: We only know protocols TCP and UDP
         if proto not in self.PROTOS:
@@ -246,15 +254,23 @@ num  target     prot opt source               destination
         if isinstance(source_parsed, ipaddress.IPv4Address) or isinstance(source_parsed, ipaddress.IPv4Network):
             # IPv4
             if proto_ver != 4:
-                return None
+                return None, None
         if isinstance(source_parsed, ipaddress.IPv6Address) or isinstance(source_parsed, ipaddress.IPv6Network):
             # IPv6
             if proto_ver != 6:
-                return None
+                return None, None
 
         # Output
         ipchain_rule = [
             "-A", self._chain, "-p", proto, "-m", proto, "--source", source, "--dport", port, "-j", "ACCEPT"
         ]
+        if comment:
+            ipchain_rule.extend(["--comment", '"{}"'.format(comment)])
 
-        return ipchain_rule
+        expired = False
+        if expiry:
+            now = datetime.utcnow()
+            if now > expiry:
+                expired = True
+
+        return expired, ipchain_rule
