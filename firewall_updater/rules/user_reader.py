@@ -52,7 +52,7 @@ class RuleReader:
 
         return os.path.exists(filename)
 
-    def read_all_users(self) -> list:
+    def read_all_users(self) -> List[Rule]:
         reader = ServiceReader(self._path)
         services = reader.read_all()
 
@@ -76,7 +76,7 @@ class RuleReader:
 
         return all_rules
 
-    def read(self, user: str) -> list:
+    def read(self, user: str) -> List[Rule]:
         if not self.has_rules_for(user):
             raise ValueError("Cannot read rules for user {}! No rules found.".format(user))
 

@@ -33,11 +33,15 @@ class FirewallBase(ABC):
         pass
 
     @abstractmethod
-    def set(self, rules: List[Tuple[str, int, str]]) -> list:
+    def query_readable(self, rules: List[Rule]) -> List[str]:
         pass
 
     @abstractmethod
-    def simulate(self, rules: List[Rule], print_rules: bool) -> Tuple[List[str], List[str]]:
+    def set(self, rules: List[Rule]) -> list:
+        pass
+
+    @abstractmethod
+    def simulate(self, rules: List[Rule]) -> Union[bool, List[str]]:
         pass
 
     @abstractmethod

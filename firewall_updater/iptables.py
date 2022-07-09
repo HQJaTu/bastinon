@@ -20,7 +20,8 @@
 import io
 import subprocess
 import shutil
-from typing import Tuple, Optional, Union, List
+from subprocess import Popen
+from typing import Tuple, Optional, Union, List, Any
 import re
 import ipaddress
 from .base import FirewallBase
@@ -28,6 +29,24 @@ from .rules import ServiceReader, Rule
 import logging
 
 log = logging.getLogger(__name__)
+
+
+class IptablesRule(Rule):
+
+    def __init__(self, rule_num: int, proto: str, port: int, source_address, comment: str = None):
+        super().__init__(proto, port, source_address, comment=comment)
+        self.rule_num = rule_num
+        self.expiry = None
+
+    def has_expired(self) -> bool:
+        raise RuntimeError("IptablesRule has no expiry!")
+
+    def __str__(self) -> str:
+        return "iptables IPv{} rule {}: {}/{} allowed from {}".format(
+            self.source_address_family,
+            self.rule_num,
+            self.proto.upper(), self.port, self.source
+        )
 
 
 class Iptables(FirewallBase):
@@ -56,53 +75,146 @@ class Iptables(FirewallBase):
             # Notes:
             # - Source address will be converted into a string
             # - A comment is either str or bool, D-Bus cannot return None
-            rules_out = [(r[1], r[2], str(r[3]), r[4] if r[4] else False) for r in active_v4_rules]
+            rules_out = [(r.proto, r.port, str(r.source_address), r.comment if r.comment else False)
+                         for r in active_v4_rules]
 
         if active_v6_rules:
             # Note: For transformation, see IPv4 above
-            rules_out.extend([(r[1], r[2], str(r[3]), r[4] if r[4] else False) for r in active_v6_rules])
+            rules_out.extend([(r.proto, r.port, str(r.source_address), r.comment if r.comment else False)
+                              for r in active_v6_rules])
 
         return rules_out
 
-    def set(self, rules: List[Tuple[str, int, str]]) -> list:
-        raise NotImplementedError("Set IPtables rules not implemented yet!")
+    def query_readable(self, rules: List[Rule]) -> List[str]:
+        rules_out = []
 
-    def simulate(self, rules: List[Rule], print_rules: bool) -> Tuple[List[str], List[str]]:
-        rules_out_4 = []
-        if print_rules:
-            print("IPv4 rules:")
         for rule in rules:
-            expired, rule_out = self._rule_to_ipchain(4, rule)
+            rule_out = self._rule_to_ipchain_append(4, rule, with_command=True)
             if rule_out:
                 rule_str = ""
-                if expired:
+                if rule.has_expired():
                     # Ah. Expired already.
                     rule_str = "# "
 
                 rule_str += ' '.join(str(r) for r in rule_out)
-                rules_out_4.append(rule_str)
-                if print_rules:
-                    print(rule_str)
+                rules_out.append(rule_str)
 
-        rules_out_6 = []
-        if print_rules:
-            print("IPv6 rules:")
         for rule in rules:
-            expired, rule_out = self._rule_to_ipchain(6, rule)
+            rule_out = self._rule_to_ipchain_append(6, rule, with_command=True)
             if rule_out:
                 rule_str = ""
-                if expired:
+                if rule.has_expired():
                     # Ah. Expired already.
                     rule_str = "# "
 
                 rule_str += ' '.join(str(r) for r in rule_out)
-                rules_out_6.append(rule_str)
-                if print_rules:
-                    print(rule_str)
+                rules_out.append(rule_str)
 
-        return rules_out_4, rules_out_6
+        return rules_out
+
+    def set(self, rules: List[Rule], force=False) -> None:
+        """
+        Set rules to firewall
+        :param rules: List of firewall rules to set
+        :param force: Force flush the chain with new rules
+        :return:
+        """
+        ipv4_rules_to_remove, ipv4_rules_to_add, ipv6_rules_to_remove, ipv6_rules_to_add, changes_needed = \
+            self._sync_rules(rules)
+
+        if not changes_needed:
+            log.info("No changes needed")
+            return
+
+        def _exec_helper(rule_out: list) -> Tuple[subprocess.Popen, bytes, bytes]:
+            rule_out_str = [str(out) for out in rule_out]
+            log.debug("Executing: '{}'".format(' '.join(rule_out_str)))
+            p = subprocess.Popen(
+                rule_out_str,
+                stdout=subprocess.PIPE)
+            output, err = p.communicate()
+
+            return p, output, err
+
+        # IPv4:
+        for rule in sorted(ipv4_rules_to_remove, key=lambda x: x.rule_num, reverse=True):
+            rule_out = self._rule_to_ipchain_delete(4, rule, with_command=True)
+            if rule_out:
+                p, output, err = _exec_helper(rule_out)
+                if p.returncode != 0:
+                    raise RuntimeError("Failed to delete IPtables IPv4 rule #{}".format(rule.rule_num))
+
+        for rule in ipv4_rules_to_add:
+            rule_out = self._rule_to_ipchain_append(4, rule, with_command=True)
+            if rule_out:
+                p, output, err = _exec_helper(rule_out)
+                if p.returncode != 0:
+                    raise RuntimeError("Failed to add IPtables IPv4 rule: '{}'".format(str(rule)))
+
+        # IPv6:
+        for rule in sorted(ipv6_rules_to_remove, key=lambda x: x.rule_num, reverse=True):
+            rule_out = self._rule_to_ipchain_delete(6, rule, with_command=True)
+            if rule_out:
+                p, output, err = _exec_helper(rule_out)
+                if p.returncode != 0:
+                    raise RuntimeError("Failed to delete IPtables IPv6 rule #{}".format(rule.rule_num))
+
+        for rule in ipv6_rules_to_add:
+            rule_out = self._rule_to_ipchain_append(6, rule, with_command=True)
+            if rule_out:
+                p, output, err = _exec_helper(rule_out)
+                if p.returncode != 0:
+                    raise RuntimeError("Failed to add IPtables IPv6 rule: '{}'".format(str(rule)))
+
+    def simulate(self, rules: List[Rule]) -> Union[bool, List[str]]:
+        """
+        Show what would happen if set rules to firewall
+        :param rules:
+        :return:
+        """
+        ipv4_rules_to_remove, ipv4_rules_to_add, ipv6_rules_to_remove, ipv6_rules_to_add, changes_needed = \
+            self._sync_rules(rules)
+
+        if not changes_needed:
+            return False
+
+        rules_out = []
+
+        # IPv4:
+        for rule in sorted(ipv4_rules_to_remove, key=lambda x: x.rule_num, reverse=True):
+            rule_out = self._rule_to_ipchain_delete(4, rule, with_command=True)
+            if rule_out:
+                rule_str = ' '.join(str(r) for r in rule_out)
+                rules_out.append(rule_str)
+        for rule in ipv4_rules_to_add:
+            rule_out = self._rule_to_ipchain_append(4, rule, with_command=True)
+            if rule_out:
+                rule_str = ' '.join(str(r) for r in rule_out)
+                rules_out.append(rule_str)
+
+        # IPv6:
+        for rule in sorted(ipv6_rules_to_remove, key=lambda x: x.rule_num, reverse=True):
+            rule_out = self._rule_to_ipchain_delete(6, rule, with_command=True)
+            if rule_out:
+                rule_str = ' '.join(str(r) for r in rule_out)
+                rules_out.append(rule_str)
+        for rule in ipv6_rules_to_add:
+            rule_out = self._rule_to_ipchain_append(6, rule, with_command=True)
+            if rule_out:
+                rule_str = ' '.join(str(r) for r in rule_out)
+                rules_out.append(rule_str)
+
+        return rules_out
 
     def needs_update(self, rules: List[Rule]) -> bool:
+        ipv4_rules_to_remove, ipv4_rules_to_add, ipv6_rules_to_remove, ipv6_rules_to_add, \
+        changes_needed = self._sync_rules(rules)
+
+        return changes_needed
+
+    def _sync_rules(self, rules: List[Rule]) -> Tuple[list, List[Rule], list, List[Rule], bool]:
+        # Prep:
+        # Index for all of the rules
         matched_rules = {}
         for idx, rule in enumerate(rules):
             if rule.has_expired():
@@ -111,7 +223,9 @@ class Iptables(FirewallBase):
 
             matched_rules[idx] = False
 
+        # IPv4 matching:
         active_ipv4_rules = self._read_chain(4)
+        ipv4_rules_to_add = []
         ipv4_rules_to_remove = []
         for active_rule in active_ipv4_rules:
             # Search for this active rule in set of user-rules
@@ -121,23 +235,63 @@ class Iptables(FirewallBase):
                 # 1) Proto
                 # 2) Port
                 # 3) Source address
-                if rule.matches(active_rule[1], active_rule[2], active_rule[3]):
+                if rule == active_rule:
                     # Found match!
-                    log.debug("Matched rule: '{}'!".format(rule))
+                    log.debug("Matched IPv4 rule: '{}'!".format(rule))
                     matched_rules[idx] = True
                     found_it = True
                     break
 
             if not found_it:
-                log.debug("Active rule '{}' not found in user rules".format(active_rule))
+                log.debug("Active IPv4 rule '{}' not found in user rules".format(active_rule))
                 ipv4_rules_to_remove.append(active_rule)
 
+        # IPv6 matching:
+        active_ipv6_rules = self._read_chain(6)
+        ipv6_rules_to_add = []
+        ipv6_rules_to_remove = []
+        for active_rule in active_ipv6_rules:
+            # Search for this active rule in set of user-rules
+            found_it = False
+            for idx, rule in enumerate(rules):
+                # Match:
+                # 1) Proto
+                # 2) Port
+                # 3) Source address
+                if rule == active_rule:
+                    # Found match!
+                    log.debug("Matched IPv6 rule: '{}'!".format(rule))
+                    matched_rules[idx] = True
+                    found_it = True
+                    break
+
+            if not found_it:
+                log.debug("Active IPv6 rule '{}' not found in user rules".format(active_rule))
+                ipv6_rules_to_remove.append(active_rule)
+
+        # Un-matched rules:
+        for idx, rule in enumerate(rules):
+            if matched_rules[idx]:
+                # This one is already matched
+                continue
+
+            if rule.source_address_family == 4:
+                ipv4_rules_to_add.append(rule)
+            elif rule.source_address_family == 6:
+                ipv6_rules_to_add.append(rule)
+
+        # Stats matched rules
         matches_found = len([True for match in matched_rules.values() if match is True])
-        log.debug("Out of {} rules, {} match. {} active rules to remove".format(
-            len(matched_rules), matches_found, len(ipv4_rules_to_remove)
+
+        # Logging
+        log.debug("Out of {} rules, {} match, {} need to be added. {} active rules to remove.".format(
+            len(matched_rules), matches_found,
+            len(ipv4_rules_to_add) + len(ipv6_rules_to_add),
+            len(ipv4_rules_to_remove) + len(ipv6_rules_to_remove)
         ))
 
-        return matches_found != len(matched_rules)
+        return ipv4_rules_to_remove, ipv4_rules_to_add, ipv6_rules_to_remove, ipv6_rules_to_add, matches_found != len(
+            matched_rules)
 
     def _clear_chain(self):
         return
@@ -146,13 +300,7 @@ class Iptables(FirewallBase):
             stdout=subprocess.PIPE)
         output, err = p.communicate()
 
-    def _read_chain(self, ip_version: int) -> List[Tuple[int, str, int,
-                                                         Union[
-                                                             ipaddress.IPv4Address, ipaddress.IPv4Network,
-                                                             ipaddress.IPv6Address, ipaddress.IPv6Network
-                                                         ],
-                                                         Union[str, None]]
-    ]:
+    def _read_chain(self, ip_version: int) -> List[IptablesRule]:
         if ip_version == 4:
             command_to_run = self._iptables_cmd
         elif ip_version == 6:
@@ -278,24 +426,54 @@ num  target     prot opt source               destination
 
             # XXX Debug noise:
             # log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
-            rule_out = (rule_num, proto, port, source_addr, comment)
+            rule_out = IptablesRule(rule_num, proto, port, source_addr, comment)
             rules_out.append(rule_out)
 
         return rules_out
 
-    def _rule_to_ipchain(self, proto_ver: int, rule: Rule) -> Tuple[Union[bool, None], Union[list, None]]:
+    def _rule_to_ipchain_append(self, proto_ver: int, rule: Rule, with_command=False) -> Union[list, None]:
         # Sanity: IPv4 or IPv6 address
         if rule.source_address_family != proto_ver:
-            return None, None
+            return None
 
         # Output
         ipchain_rule = [
             "-A", self._chain, "-p", rule.proto, "-m", rule.proto, "--source", rule.source, "--dport", rule.port
         ]
         if rule.comment:
-            ipchain_rule.extend(["-m", "comment", "--comment", '"{}"'.format(rule.comment)])
+            ipchain_rule.extend(["-m", "comment", "--comment", rule.comment])
         ipchain_rule.extend(["-j", "ACCEPT"])
 
-        expired = False
+        if with_command:
+            if rule.source_address_family == 4:
+                command_to_run = self._iptables_cmd
+            elif rule.source_address_family == 6:
+                command_to_run = self._ip6tables_cmd
+            else:
+                raise ValueError("IP-version needs to be 4 or 6! Has: '{}'".format(rule.source_address_family))
 
-        return expired, ipchain_rule
+            ipchain_rule.insert(0, command_to_run)
+
+        return ipchain_rule
+
+    def _rule_to_ipchain_delete(self, proto_ver: int, rule: IptablesRule, with_command=False) -> Union[list, None]:
+        # Sanity: IPv4 or IPv6 address
+        if rule.source_address_family != proto_ver:
+            return None
+
+        # Output
+        ipchain_rule = [
+            "-D", self._chain, rule.rule_num
+        ]
+
+        if with_command:
+            if rule.source_address_family == 4:
+                command_to_run = self._iptables_cmd
+            elif rule.source_address_family == 6:
+                command_to_run = self._ip6tables_cmd
+            else:
+                raise ValueError("IP-version needs to be 4 or 6! Has: '{}'".format(rule.source_address_family))
+
+            ipchain_rule.insert(0, command_to_run)
+
+        return ipchain_rule

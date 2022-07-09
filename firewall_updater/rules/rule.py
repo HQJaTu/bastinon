@@ -33,7 +33,7 @@ class Rule:
 
         return False
 
-    def matches(self, proto: str, port: int, source_address, comment: str = None):
+    def matches(self, proto: str, port: int, source_address, comment: str = None) -> bool:
         if proto not in self.PROTOCOLS:
             raise ValueError("Proto '{}' not allowed! Known are: {}".format(proto, ', '.join(self.PROTOCOLS)))
         if port < 1:
@@ -53,7 +53,8 @@ class Rule:
             return False
 
         if comment:
-            if not self.comment or self.comment == comment:
+            if not self.comment or self.comment != comment:
+                #print("Rule comment won't match! me: '{}', other: '{}'".format(self.comment, comment))
                 return False
 
         return True
@@ -86,3 +87,6 @@ class Rule:
         return "IPv{} rule: {}/{} allowed from {}".format(
             self.source_address_family, self.proto.upper(), self.port, self.source
         )
+
+    def __eq__(self, other: 'Rule'):
+        return self.matches(other.proto, other.port, other.source_address, comment=other.comment)

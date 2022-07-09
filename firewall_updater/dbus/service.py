@@ -109,8 +109,8 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="as")
-    def GetRules(self, user: str) -> list:
+                    in_signature="", out_signature="as")
+    def GetRules(self) -> list:
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
@@ -124,8 +124,7 @@ class FirewallUpdaterService(service.Object):
         rules = reader.read_all_users()
 
         # Test the newly read rules
-        rules_4, rules_6 = self._firewall.simulate(rules, print_rules=False)
-        rules_out = rules_4 + rules_6
+        rules_out = [str(out) for out in rules]
 
         log.info("Returning list of {} firewall rules".format(len(rules_out)))
 

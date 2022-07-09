@@ -52,8 +52,10 @@ def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None
     rules = reader.read_all_users()
 
     # Test the newly read rules
-    log.info("Simulated rules:")
-    rule_engine.simulate(rules, print_rules=True)
+    log.info("Human-readable rules:")
+    rules_str = rule_engine.query_readable(rules)
+    from pprint import pprint
+    pprint(rules_str)
 
 
 def read_active_rules_from_firewall(rule_engine: FirewallBase) -> None:
@@ -76,6 +78,23 @@ def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
         log.info("All ok")
 
 
+def rules_simulation(rule_engine: FirewallBase, rules_path: str) -> None:
+    reader = RuleReader(rules_path)
+    rules = reader.read_all_users()
+
+    # Test the newly read rules
+    log.info("Changes:")
+    changes = rule_engine.simulate(rules)
+    if not changes:
+        log.info("All ok")
+    else:
+        from pprint import pprint
+        pprint(changes)
+
+        log.info("Proceed with changes:")
+        rule_engine.set(rules)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Firewall Updates daemon')
     parser.add_argument("rule_path", metavar="RULE-PATH",
@@ -92,8 +111,9 @@ def main() -> None:
 
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
-    read_active_rules_from_firewall(iptables_firewall)
-    rules_need_update(iptables_firewall, args.rule_path)
+    # read_active_rules_from_firewall(iptables_firewall)
+    # rules_need_update(iptables_firewall, args.rule_path)
+    rules_simulation(iptables_firewall, args.rule_path)
 
 
 if __name__ == "__main__":

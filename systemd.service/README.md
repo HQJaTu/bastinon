@@ -73,8 +73,8 @@ Response (based on user who sent the ping):
    string "Hi Joe Nobody! pong"
 ```
 
-## Test send email `--system`
-When service is running, following command will report file named `-FILENAME-HERE-` as spam.
+## Test query for all user's rules `--system`
+Query for requested rules:
 
 ```bash
 dbus-send \
@@ -82,5 +82,17 @@ dbus-send \
   --print-reply \
   --type=method_call \
   --dest=fi.hqcodeshop.Firewall \
-  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetRules "string:-FILENAME-HERE-"
+  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetRules
+```
+
+## Test query for currently active firewall rules `--system`
+Query for actual rules:
+
+```bash
+dbus-send \
+  --system \
+  --print-reply \
+  --type=method_call \
+  --dest=fi.hqcodeshop.Firewall \
+  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetActiveRules "string:-FILENAME-HERE-"
 ```
