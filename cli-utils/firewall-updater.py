@@ -57,11 +57,23 @@ def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None
 
 
 def read_active_rules_from_firewall(rule_engine: FirewallBase) -> None:
-    log.info("Active rules:")
     rules = rule_engine.query()
 
+    log.info("Active rules ({}):".format(len(rules)))
     from pprint import pprint
     pprint(rules)
+
+
+def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
+    reader = RuleReader(rules_path)
+    rules = reader.read_all_users()
+
+    # Test the newly read rules
+    log.info("Rules need updating:")
+    if rule_engine.needs_update(rules):
+        log.info("Need updating")
+    else:
+        log.info("All ok")
 
 
 def main() -> None:
@@ -81,6 +93,7 @@ def main() -> None:
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
     read_active_rules_from_firewall(iptables_firewall)
+    rules_need_update(iptables_firewall, args.rule_path)
 
 
 if __name__ == "__main__":

@@ -102,7 +102,38 @@ class Iptables(FirewallBase):
         return rules_out_4, rules_out_6
 
     def needs_update(self, rules: List[Tuple[str, int, str, Union[datetime, None]]]) -> bool:
-        active_ipv4_rules = self._read_chain()
+        now = datetime.utcnow()
+        matched_rules = {}
+        for idx, rule in enumerate(rules):
+            if rule[3] and rule[3] > now:
+                # Ah. Expired already. We won't be needing this rule in active ones.
+                continue
+
+            matched_rules[idx] = False
+
+        active_ipv4_rules = self._read_chain(4)
+        ipv4_rules_to_remove = []
+        for active_rule in active_ipv4_rules:
+            # Search for this active rule in set of user-rules
+            found_it = False
+            for idx, rule in enumerate(rules):
+                if active_rule[0] == rule[0] and active_rule[1] == rule[1] and active_rule[2] == rule[2]:
+                    # Found match!
+                    log.debug("Matched rule: '{}'!".format(rule))
+                    matched_rules[idx] = True
+                    found_it = True
+                    break
+
+            if not found_it:
+                log.debug("Active rule '{}' not found in user rules".format(active_rule))
+                ipv4_rules_to_remove.append(active_rule)
+
+        matches_found = len([True for match in matched_rules.values() if match is True])
+        log.debug("Out of {} rules, {} match. {} active rules to remove".format(
+            len(matched_rules), matches_found, len(ipv4_rules_to_remove)
+        ))
+
+        return matches_found == len(matched_rules)
 
     def _clear_chain(self):
         return
@@ -126,7 +157,7 @@ class Iptables(FirewallBase):
             stdout=subprocess.PIPE)
         output, err = p.communicate()
         if p.returncode != 0:
-            raise RuntimeError("Failed to query for IPtables rules.")
+            raise RuntimeError("Failed to query for IPtables rules with command: {}".format(command_to_run))
 
         """
 Chain Example-Chain-INPUT (1 references)

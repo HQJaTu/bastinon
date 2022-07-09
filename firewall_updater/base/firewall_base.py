@@ -40,3 +40,7 @@ class FirewallBase(ABC):
         List[str], List[str]
     ]:
         pass
+
+    @abstractmethod
+    def needs_update(self, rules: List[Tuple[str, int, str, Union[datetime, None]]]) -> bool:
+        pass
