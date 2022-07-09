@@ -21,6 +21,7 @@ import os
 from typing import Union, Tuple, List
 from dbus import (SessionBus, SystemBus, service, mainloop)
 from pwd import getpwuid
+from datetime import datetime
 from ..base.firewall_base import FirewallBase
 from ..rules import RuleReader
 import logging
@@ -132,8 +133,8 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="a(sis)")
-    def GetActiveRules(self, user: str) -> List[Tuple[str, int, str]]:
+                    in_signature="s", out_signature="a(sisv)")
+    def GetActiveRules(self, user: str) -> List[Tuple[str, int, str, Union[str, bool]]]:
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
@@ -144,8 +145,9 @@ class FirewallUpdaterService(service.Object):
         """
 
         # Test the newly read rules
-        rules_out = self._firewall.query()
+        active_rules = self._firewall.query()
+        rule_count = len(active_rules)
 
-        log.info("Returning list of {} firewall rules".format(len(rules_out)))
+        log.info("Returning list of {} firewall rules".format(rule_count))
 
-        return rules_out
+        return active_rules

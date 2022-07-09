@@ -62,13 +62,18 @@ class Rule:
     def _parse_address(address_in) -> Tuple[int, Union[
         ipaddress.IPv4Address, ipaddress.IPv4Network, ipaddress.IPv6Address, ipaddress.IPv6Network
     ]]:
-        try:
-            source_parsed = ipaddress.ip_address(address_in)
-        except ValueError:
+        if isinstance(address_in, str):
+            # Only parse strings
             try:
-                source_parsed = ipaddress.ip_network(address_in)
+                source_parsed = ipaddress.ip_address(address_in)
             except ValueError:
-                raise ValueError("Really weird IP-address definition '{}'!".format(address_in))
+                try:
+                    source_parsed = ipaddress.ip_network(address_in)
+                except ValueError:
+                    raise ValueError("Really weird IP-address definition '{}'!".format(address_in))
+        else:
+            # Assume ready-parsed object
+            source_parsed = address_in
 
         if isinstance(source_parsed, ipaddress.IPv4Address) or isinstance(source_parsed, ipaddress.IPv4Network):
             return 4, source_parsed

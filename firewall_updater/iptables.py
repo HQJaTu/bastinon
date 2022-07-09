@@ -22,7 +22,7 @@ import subprocess
 import shutil
 from typing import Tuple, Optional, Union, List
 import re
-from datetime import datetime
+import ipaddress
 from .base import FirewallBase
 from .rules import ServiceReader, Rule
 import logging
@@ -43,16 +43,24 @@ class Iptables(FirewallBase):
         if not self._ip6tables_cmd:
             raise ValueError("Cannot find exact location of ip6tables-command! Failing to continue.")
 
-    def query(self) -> List[Tuple[str, int, str]]:
+    def query(self) -> List[Tuple[str, int, str, Union[str, None]]]:
+        """
+        Query for currently active firewall rules
+        :return: list of tuples, tuple will contain proto, port, source address and comment
+        """
         active_v4_rules = self._read_chain(4)
         active_v6_rules = self._read_chain(6)
 
         rules_out = []
         if active_v4_rules:
-            rules_out = [(r[1], r[2], r[3]) for r in active_v4_rules]
+            # Notes:
+            # - Source address will be converted into a string
+            # - A comment is either str or bool, D-Bus cannot return None
+            rules_out = [(r[1], r[2], str(r[3]), r[4] if r[4] else False) for r in active_v4_rules]
 
         if active_v6_rules:
-            rules_out.extend([(r[1], r[2], r[3]) for r in active_v6_rules])
+            # Note: For transformation, see IPv4 above
+            rules_out.extend([(r[1], r[2], str(r[3]), r[4] if r[4] else False) for r in active_v6_rules])
 
         return rules_out
 
@@ -95,7 +103,6 @@ class Iptables(FirewallBase):
         return rules_out_4, rules_out_6
 
     def needs_update(self, rules: List[Rule]) -> bool:
-        now = datetime.utcnow()
         matched_rules = {}
         for idx, rule in enumerate(rules):
             if rule.has_expired():
@@ -139,7 +146,13 @@ class Iptables(FirewallBase):
             stdout=subprocess.PIPE)
         output, err = p.communicate()
 
-    def _read_chain(self, ip_version: int) -> List[Tuple[int, str, int, str]]:
+    def _read_chain(self, ip_version: int) -> List[Tuple[int, str, int,
+                                                         Union[
+                                                             ipaddress.IPv4Address, ipaddress.IPv4Network,
+                                                             ipaddress.IPv6Address, ipaddress.IPv6Network
+                                                         ],
+                                                         Union[str, None]]
+    ]:
         if ip_version == 4:
             command_to_run = self._iptables_cmd
         elif ip_version == 6:
@@ -184,40 +197,88 @@ num  target     prot opt source               destination
                 continue
 
             # Regular rows
-            #                     1:      2:      3:      4:      5:      6:      7:
-            match = re.search(r'^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)', line.rstrip())
-            if not match:
-                raise ValueError("IPchain output error! Rule cannot be parsed: '{}'".format(line.strip()))
+            if ip_version == 4:
+                #                     1:      2:      3:      4:      5:      6:      7:
+                match = re.search(r'^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)', line.rstrip())
+                if not match:
+                    raise ValueError("IPchain output error! Rule cannot be parsed: '{}'".format(line.strip()))
 
-            rule_num = int(match.group(1))
-            destination_chain = match.group(2)
-            proto = match.group(3)
-            options = match.group(4)
-            source_addr = match.group(5)
-            destination_addr = match.group(6)
-            destination = match.group(7)
+                rule_num = int(match.group(1))
+                destination_chain = match.group(2)
+                proto = match.group(3)
+                options = match.group(4)
+                address_in = match.group(5)
+                destination_addr = match.group(6)
+                destination = match.group(7)
 
+                if options != "--":
+                    raise ValueError("IPchain output error! Options is rules not supported, "
+                                     "rule: '{}'".format(line.strip()))
+
+                # Parse the source address
+                try:
+                    source_addr = ipaddress.ip_address(address_in)
+                except ValueError:
+                    try:
+                        source_addr = ipaddress.ip_network(address_in)
+                    except ValueError:
+                        raise ValueError("Really weird IP-address definition '{}'!".format(address_in))
+
+                if not isinstance(source_addr, ipaddress.IPv4Address) and not isinstance(source_addr,
+                                                                                         ipaddress.IPv4Network):
+                    raise ValueError("Really weird IPv4-address definition '{}'!".format(address_in))
+
+            elif ip_version == 6:
+                #                     1:      2:      3:      4:      5:      6:
+                match = re.search(r'^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)', line.rstrip())
+                if not match:
+                    raise ValueError("IPchain output error! Rule cannot be parsed: '{}'".format(line.strip()))
+                rule_num = int(match.group(1))
+                destination_chain = match.group(2)
+                proto = match.group(3)
+                address_in = match.group(4)
+                destination_addr = match.group(5)
+                destination = match.group(6)
+
+                # Parse the source address
+                try:
+                    source_addr = ipaddress.ip_address(address_in)
+                except ValueError:
+                    try:
+                        source_addr = ipaddress.ip_network(address_in)
+                    except ValueError:
+                        raise ValueError("Really weird IP-address definition '{}'!".format(address_in))
+
+                if not isinstance(source_addr, ipaddress.IPv6Address) and not isinstance(source_addr,
+                                                                                         ipaddress.IPv6Network):
+                    raise ValueError("Really weird IPv6-address definition '{}'!".format(address_in))
+
+            else:
+                raise RuntimeError("Internal: Don't know if IPv4 or IPv6!")
+
+            # Common part:
             if destination_chain != "ACCEPT":
                 raise ValueError("IPchain output error! Rule isn't an ACCEPT-rule, "
                                  "is a '{}', rule: '{}'".format(destination_chain, line.strip()))
             if proto not in ServiceReader.PROTOCOLS:
                 raise ValueError("IPchain output error! Rule has unsupported proto '{}', "
                                  "rule: '{}'".format(proto, line.strip()))
-            if options != "--":
-                raise ValueError("IPchain output error! Options is rules not supported, "
-                                 "rule: '{}'".format(line.strip()))
-
             # Parse destination, it contains all possible options of iptables-rule
             port = None
-            match = re.search(r'^\w+\s+dpt:(\d+)$', destination)
+            match = re.search(r'^\w+\s+dpt:(\d+)(\s+/\*\s+(.+)\s+\*/)?$', destination)
             if not match:
                 raise ValueError("IPchain output error! Rule destination needs to be a simple port definition, "
                                  "rule: '{}'".format(line.strip()))
             port = int(match.group(1))
+            if match.group(2):
+                comment = match.group(3)
+                # log.debug("Comment: '{}'".format(comment))
+            else:
+                comment = None
 
             # XXX Debug noise:
             # log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
-            rule_out = (rule_num, proto, port, source_addr)
+            rule_out = (rule_num, proto, port, source_addr, comment)
             rules_out.append(rule_out)
 
         return rules_out
@@ -229,10 +290,11 @@ num  target     prot opt source               destination
 
         # Output
         ipchain_rule = [
-            "-A", self._chain, "-p", rule.proto, "-m", rule.proto, "--source", rule.source, "--dport", rule.port, "-j", "ACCEPT"
+            "-A", self._chain, "-p", rule.proto, "-m", rule.proto, "--source", rule.source, "--dport", rule.port
         ]
         if rule.comment:
-            ipchain_rule.extend(["--comment", '"{}"'.format(rule.comment)])
+            ipchain_rule.extend(["-m", "comment", "--comment", '"{}"'.format(rule.comment)])
+        ipchain_rule.extend(["-j", "ACCEPT"])
 
         expired = False
 

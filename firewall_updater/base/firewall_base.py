@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 class FirewallBase(ABC):
 
     @abstractmethod
-    def query(self) -> List[Tuple[str, int, str]]:
+    def query(self) -> List[Tuple[str, int, str, Union[str, None]]]:
         pass
 
     @abstractmethod
