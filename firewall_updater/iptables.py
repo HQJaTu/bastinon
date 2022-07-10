@@ -78,30 +78,49 @@ class Iptables(FirewallBase):
         if not self._ip6tables_cmd:
             raise ValueError("Cannot find exact location of ip6tables-command! Failing to continue.")
 
-    def query(self) -> List[Tuple[str, int, str, Union[str, None]]]:
+    #
+    # Abstract implementation for IPtables
+    #
+
+    def query(self, rules: List[UserRule]) -> List[Tuple[str, str, int, str, Union[str, None], bool]]:
         """
         Query for currently active firewall rules
-        :return: list of tuples, tuple will contain proto, port, source address and comment
+        :return: list of tuples, tuple: user, proto, port, source address, comment, rule in effect
         """
-        active_v4_rules = self._read_chain(4)
-        active_v6_rules = self._read_chain(6)
+
+        ipv4_rules_matched, _, ipv4_rules_to_add, \
+        ipv6_rules_matched, _, ipv6_rules_to_add, \
+        _ = \
+            self._sync_rules(rules)
 
         rules_out = []
-        if active_v4_rules:
+        if ipv4_rules_matched:
             # Notes:
             # - Source address will be converted into a string
             # - A comment is either str or bool, D-Bus cannot return None
-            rules_out = [(r.proto, r.port, str(r.source_address), r.comment if r.comment else False)
-                         for r in active_v4_rules]
+            rules_out = [(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, True)
+                         for r in ipv4_rules_matched]
+        if ipv4_rules_to_add:
+            rules_out = [(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, False)
+                         for r in ipv4_rules_to_add]
 
-        if active_v6_rules:
+        if ipv6_rules_matched:
             # Note: For transformation, see IPv4 above
-            rules_out.extend([(r.proto, r.port, str(r.source_address), r.comment if r.comment else False)
-                              for r in active_v6_rules])
+            rules_out.extend([(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, True)
+                              for r in ipv6_rules_matched])
+        if ipv6_rules_to_add:
+            # Note: For transformation, see IPv4 above
+            rules_out.extend([(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, False)
+                              for r in ipv6_rules_to_add])
 
         return rules_out
 
     def query_readable(self, rules: List[UserRule]) -> List[str]:
+        """
+        Query for currently active firewall rules
+        :return: list of strings
+        """
+
         rules_out = []
 
         for rule in rules:
@@ -193,7 +212,7 @@ class Iptables(FirewallBase):
         """
         Show what would happen if set rules to firewall
         :param rules:
-        :return:
+        :return: list of strings, what firewall would need to do to make rules effective
         """
         _, ipv4_rules_to_remove, ipv4_rules_to_add, \
         _, ipv6_rules_to_remove, ipv6_rules_to_add, \
@@ -232,9 +251,18 @@ class Iptables(FirewallBase):
         return rules_out
 
     def needs_update(self, rules: List[UserRule]) -> bool:
+        """
+        Query if any rules requested by users are not in effect
+        :param rules: list of user rules
+        :return: bool, True = changes needed, False = all rules effective
+        """
         _, _, _, _, _, _, changes_needed = self._sync_rules(rules)
 
         return changes_needed
+
+    #
+    # IPtables internal implementation below
+    #
 
     def _sync_rules(self, user_rules: List[UserRule]) -> Tuple[
         List[MatchedIptablesRule], list, List[UserRule],

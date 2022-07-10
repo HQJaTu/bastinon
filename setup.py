@@ -28,7 +28,9 @@ setup(
         'lxml',
         'dbus-python==1.2.18',
         'systemd==0.16.1',
-        'systemd-watchdog==0.9.0'
+        'systemd-watchdog==0.9.0',
+        'asyncio_glib',
+        'asyncio-periodic'
     ],
     scripts=['cli-utils/firewall-updater-service.py'],
     data_files=[

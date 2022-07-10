@@ -37,9 +37,10 @@ Policy install (as _root_):
     ```
    Response will contain published interface:
     ```text
-    NAME                 TYPE      SIGNATURE RESULT/VALUE FLAGS
-    .Ping                method    -         s            -
-    .ReportFile          method    s         s            -
+   NAME                   TYPE      SIGNATURE RESULT/VALUE FLAGS
+   .GetRules              method    s         a(ssisvb)    -
+   .GetServices           method    -         as           -
+   .Ping                  method    -         s            -
     ```
 5. Test service with a ping:
     ```bash
@@ -52,26 +53,9 @@ Policy install (as _root_):
    Response will contain a greeting to the caller:
     ```text
     method return time=1647618215.603226 sender=:1.250 -> destination=:1.252 serial=6 reply_serial=2
-       string "Hi Joe User in system-bus! pong"
+       string "Hi in system-bus! pong"
     ```
 6. Done!
-
-## Test ping `--session`
-When service is running, see if D-Bus works.
-
-Run:
-```bash
-dbus-send \
-  --print-reply \
-  --type=method_call \
-  --dest=fi.hqcodeshop.Firewall \
-  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.Ping
-```
-
-Response (based on user who sent the ping):
-```text
-   string "Hi Joe Nobody! pong"
-```
 
 ## Test query for all user's rules `--system`
 Query for requested rules:
@@ -82,7 +66,7 @@ dbus-send \
   --print-reply \
   --type=method_call \
   --dest=fi.hqcodeshop.Firewall \
-  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetRules
+  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetRules string:nobody
 ```
 
 ## Test query for currently active firewall rules `--system`
@@ -94,5 +78,27 @@ dbus-send \
   --print-reply \
   --type=method_call \
   --dest=fi.hqcodeshop.Firewall \
-  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetActiveRules "string:-FILENAME-HERE-"
+  /fi/hqcodeshop/Firewall fi.hqcodeshop.Firewall.GetServices
+```
+
+Will return your configured services available for users. Example:
+```text
+   array [
+      string "dns"
+      string "smtp"
+      string "ssh"
+      string "imaps"
+      string "ftp"
+   ]
+```
+
+## Troubleshooting
+Monitor with a watch:
+
+```bash
+dbus-monitor \
+  --system \
+  "type=method_call,interface=fi.hqcodeshop.Firewall" \
+  "type=signal,interface=fi.hqcodeshop.Firewall" \
+  "type=error"
 ```

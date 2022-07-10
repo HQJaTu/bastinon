@@ -19,7 +19,6 @@
 
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Union
-from datetime import datetime
 from ..rules import UserRule
 import logging
 
@@ -29,21 +28,45 @@ log = logging.getLogger(__name__)
 class FirewallBase(ABC):
 
     @abstractmethod
-    def query(self) -> List[Tuple[str, int, str, Union[str, None]]]:
+    def query(self, rules: List[UserRule]) -> List[Tuple[str, str, int, str, Union[str, None], bool]]:
+        """
+        Query for currently active firewall rules
+        :return: list of tuples, tuple: user, proto, port, source address, comment, rule in effect
+        """
         pass
 
     @abstractmethod
     def query_readable(self, rules: List[UserRule]) -> List[str]:
+        """
+        Query for currently active firewall rules
+        :return: list of strings
+        """
         pass
 
     @abstractmethod
-    def set(self, rules: List[UserRule]) -> list:
+    def set(self, rules: List[UserRule], force=False) -> None:
+        """
+        Set rules to firewall
+        :param rules: List of firewall rules to set
+        :param force: Force flush the chain with new rules
+        :return:
+        """
         pass
 
     @abstractmethod
     def simulate(self, rules: List[UserRule]) -> Union[bool, List[str]]:
+        """
+        Show what would happen if set rules to firewall
+        :param rules:
+        :return: list of strings, what firewall would need to do to make rules effective
+        """
         pass
 
     @abstractmethod
     def needs_update(self, rules: List[UserRule]) -> bool:
+        """
+        Query if any rules requested by users are not in effect
+        :param rules: list of user rules
+        :return: bool, True = changes needed, False = all rules effective
+        """
         pass

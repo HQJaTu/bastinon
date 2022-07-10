@@ -20,10 +20,10 @@
 import os
 from typing import Union, Tuple, List
 from dbus import (SessionBus, SystemBus, service, mainloop)
-from pwd import getpwuid
+from pwd import getpwuid, getpwnam
 from datetime import datetime
 from ..base.firewall_base import FirewallBase
-from ..rules import RuleReader
+from ..rules import RuleReader, ServiceReader
 import logging
 
 log = logging.getLogger(__name__)
@@ -60,24 +60,57 @@ class FirewallUpdaterService(service.Object):
         self._firewall = firewall
         self._firewall_rules_path = firewall_rules_path
 
-    def _get_user_info(self) -> Tuple[int, str]:
-        unix_user_id = self.connection.get_unix_user(FIREWALL_UPDATER_SERVICE_BUS_NAME)
-        unix_user_passwd_record = getpwuid(unix_user_id)
+    def _get_creds(self, bus_name: str):
+        # See: https://dbus.freedesktop.org/doc/dbus-specification.html#bus-messages-get-connection-credentials
+        from _dbus_bindings import BUS_DAEMON_IFACE, BUS_DAEMON_NAME, BUS_DAEMON_PATH
+        response = self.connection.call_blocking(BUS_DAEMON_NAME, BUS_DAEMON_PATH,
+                                                 BUS_DAEMON_IFACE, 'GetConnectionCredentials',
+                                                 's', (bus_name,))
+        from pprint import pprint
+        # ProcessID, UnixUserID, LinuxSecurityLabel
+        pprint(response.keys())
+        if 'LinuxSecurityLabel' in response:
+            # linux_security_label = response['LinuxSecurityLabel'].decode('utf-8')
+            linux_security_label = bytes(response['LinuxSecurityLabel']).decode('utf-8')
+            pprint(linux_security_label)
+        else:
+            log.error("Nope")
+
+        raise NotImplementedError()
+
+    def _get_user_info(self, user: str) -> Tuple[int, str, str]:
+        # Docs: https://dbus.freedesktop.org/doc/dbus-python/dbus.bus.html#dbus.bus.BusConnection.get_unix_user
+        # "Get the numeric uid of the process owning the given bus name."
+        # unix_user_id = self.connection.get_unix_user(FIREWALL_UPDATER_SERVICE_BUS_NAME)
+        # Docs: https://dbus.freedesktop.org/doc/dbus-python/dbus.bus.html?highlight=get_peer_unix_user#dbus.bus.BusConnection.get_peer_unix_user
+        # "Get the UNIX user ID at the other end of the connection, if it has been authenticated.
+        #  Return None if this is a non-UNIX platform or the connection has not been authenticated."
+
+        # is_authenticated = self.connection.get_is_authenticated()
+        # process_id = self.connection.get_peer_unix_process_id()
+        # unix_user_id = self.connection.get_peer_unix_user()
+
+        unix_user_passwd_record = getpwnam(user)
         if unix_user_passwd_record:
-            user = unix_user_passwd_record.pw_name
+            user_id = unix_user_passwd_record.pw_uid
+            user_login = unix_user_passwd_record.pw_name
+            user_full_name = unix_user_passwd_record.pw_name
             if unix_user_passwd_record.pw_gecos:
                 gecos = unix_user_passwd_record.pw_gecos.split(',')
                 if gecos[0]:
-                    user = gecos[0]
+                    user_full_name = gecos[0]
         else:
-            user = None
+            user_id = None
+            user_login = None
+            user_full_name = None
 
-        return unix_user_id, user
+        return user_id, user_login, user_full_name
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature=None, out_signature="s")
-    def Ping(self):
+                    in_signature=None, out_signature="s",
+                    sender_keyword='sender')
+    def Ping(self, sender=None):
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
@@ -87,7 +120,7 @@ class FirewallUpdaterService(service.Object):
         https://github.com/freedesktop/dbus-python/blob/master/dbus/service.py
         :return: str
         """
-        log.info("ping received")
+        log.debug("ping received from sender: {}".format(sender))
 
         # Get a BusConnection-object of this call and query for more details.
         if self.connection._bus_type == 0:
@@ -97,20 +130,38 @@ class FirewallUpdaterService(service.Object):
         else:
             bus_type = "unknown"
 
-        # Get details of user ID making the request
-        user_id, user_name = self._get_user_info()
-        if user_name:
-            greeting = "Hi {}".format(user_name)
-        else:
-            greeting = "Hi"
-        greeting = "{} in {}-bus! pong".format(greeting, bus_type)
+        if False:
+            # Get details of user ID making the request
+            user_id, user_name = self._get_user_info()
+            if user_name:
+                greeting = "Hi {}".format(user_name)
+            else:
+                greeting = "Hi"
+            greeting = "{} in {}-bus! pong".format(greeting, bus_type)
+        greeting = "Hi in {}-bus! pong".format(bus_type)
 
         return greeting
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="", out_signature="as")
-    def GetRules(self) -> list:
+                    in_signature=None, out_signature="as",
+                    sender_keyword='sender')
+    def GetServices(self, sender=None) -> list:
+        reader = ServiceReader(self._firewall_rules_path)
+        services = reader.read_all()
+
+        # Test the newly read rules
+        services_out = [str(out) for out in services]
+
+        log.info("GetServices(): Returning list of {} firewall services".format(len(services_out)))
+
+        return services_out
+
+    # noinspection PyPep8Naming
+    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
+                    in_signature="s", out_signature="a(ssisvb)",
+                    sender_keyword='sender')
+    def GetRules(self, user: str, sender=None) -> List[Tuple[str, str, int, str, Union[str, None], bool]]:
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
@@ -120,33 +171,23 @@ class FirewallUpdaterService(service.Object):
         :return: list of str, firewall saved rules
         """
 
+        # Get details of user ID making the request
+        if user:
+            user_id, user_login, user_full_name = self._get_user_info(user)
+        else:
+            user_id, user_login, user_full_name = (None, '-all-', 'All Users')
+
         reader = RuleReader(self._firewall_rules_path)
         rules = reader.read_all_users()
+        active_rules = self._firewall.query(rules)
 
-        # Test the newly read rules
-        rules_out = [str(out) for out in rules]
+        # Rules
+        if user:
+            rules_out = [r for r in active_rules if r[0] == user]
+        else:
+            rules_out = active_rules
 
-        log.info("Returning list of {} firewall rules".format(len(rules_out)))
+        log.info(
+            "GetRules({}) [{}]: Returning list of {} firewall rules".format(user_login, user_full_name, len(rules_out)))
 
         return rules_out
-
-    # noinspection PyPep8Naming
-    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="a(sisv)")
-    def GetActiveRules(self, user: str) -> List[Tuple[str, int, str, Union[str, bool]]]:
-        """
-        Method docs:
-        https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
-        Signature docs:
-        https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
-        :param user, str, optional user to limit firewall rules into
-        :return: list of str, firewall active rules
-        """
-
-        # Test the newly read rules
-        active_rules = self._firewall.query()
-        rule_count = len(active_rules)
-
-        log.info("Returning list of {} firewall rules".format(rule_count))
-
-        return active_rules

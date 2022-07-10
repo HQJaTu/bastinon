@@ -98,7 +98,7 @@ def daemon(use_system_bus: bool, firewall: FirewallBase, firewall_rules_path: st
 
         def _cancel_handler(num: int) -> None:
             name = signal.Signals(num).name
-            log.warning('FolderWatcher received signal: {} ({}). Setting cancellation event.'.format(name, num))
+            log.warning('Firewall Updater service received signal: {} ({}). Setting cancellation event.'.format(name, num))
             cancellation_event.set()
             cancellation_event.signal = num
 
