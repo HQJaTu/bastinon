@@ -30,6 +30,21 @@ import logging
 log = logging.getLogger(__name__)
 
 
+class UserRule(Rule):
+
+    def __init__(self, owner: str, proto: str, port: int, source_address, expiry: datetime = None, comment: str = None):
+        super().__init__(proto, port, source_address, expiry=expiry, comment=comment)
+        self.owner = owner
+
+    def __str__(self) -> str:
+        return "User {} IPv{} rule: {}/{} allowed from {}, Expiry: {}".format(
+            self.owner,
+            self.source_address_family,
+            self.proto.upper(), self.port, self.source,
+            self.expiry
+        )
+
+
 class RuleReader:
     USERS_PATH = r"users"
 
@@ -52,7 +67,7 @@ class RuleReader:
 
         return os.path.exists(filename)
 
-    def read_all_users(self) -> List[Rule]:
+    def read_all_users(self) -> List[UserRule]:
         reader = ServiceReader(self._path)
         services = reader.read_all()
 
@@ -76,7 +91,7 @@ class RuleReader:
 
         return all_rules
 
-    def read(self, user: str) -> List[Rule]:
+    def read(self, user: str) -> List[UserRule]:
         if not self.has_rules_for(user):
             raise ValueError("Cannot read rules for user {}! No rules found.".format(user))
 
@@ -89,7 +104,7 @@ class RuleReader:
         return rules
 
     @staticmethod
-    def _user_rule_reader(user: str, user_rules_filename: str, services: dict) -> List[Rule]:
+    def _user_rule_reader(user: str, user_rules_filename: str, services: dict) -> List[UserRule]:
         log.debug("For user {}, reading rule file: {}".format(user, user_rules_filename))
         root = etree.parse(user_rules_filename)
         schema_filename = "{}/xml-schemas/user_rule.xsd".format(sys.prefix)
@@ -135,7 +150,7 @@ class RuleReader:
                         comment = None
 
                     for service_def in service:
-                        rule = Rule(service_def[0], service_def[1], source, expiry, comment)
+                        rule = UserRule(user, service_def[0], service_def[1], source, expiry, comment)
                         rules.append(rule)
 
         return rules

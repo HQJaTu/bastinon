@@ -57,6 +57,11 @@ def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None
     from pprint import pprint
     pprint(rules_str)
 
+    if False:
+        # UserRules as strings
+        for rule in rules:
+            print(str(rule))
+
 
 def read_active_rules_from_firewall(rule_engine: FirewallBase) -> None:
     rules = rule_engine.query()
@@ -78,7 +83,7 @@ def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
         log.info("All ok")
 
 
-def rules_simulation(rule_engine: FirewallBase, rules_path: str) -> None:
+def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bool) -> None:
     reader = RuleReader(rules_path)
     rules = reader.read_all_users()
 
@@ -91,8 +96,11 @@ def rules_simulation(rule_engine: FirewallBase, rules_path: str) -> None:
         from pprint import pprint
         pprint(changes)
 
-        log.info("Proceed with changes:")
-        rule_engine.set(rules)
+        if not simulation:
+            log.info("Proceed with changes:")
+            rule_engine.set(rules)
+        else:
+            log.info("Simulation. Won't proceed with changes:")
 
 
 def main() -> None:
@@ -113,7 +121,7 @@ def main() -> None:
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
     # read_active_rules_from_firewall(iptables_firewall)
     # rules_need_update(iptables_firewall, args.rule_path)
-    rules_simulation(iptables_firewall, args.rule_path)
+    rules_enforcement(iptables_firewall, args.rule_path, simulation=True)
 
 
 if __name__ == "__main__":

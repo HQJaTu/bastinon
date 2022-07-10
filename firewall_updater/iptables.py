@@ -237,7 +237,8 @@ class Iptables(FirewallBase):
                 # 3) Source address
                 if rule == active_rule:
                     # Found match!
-                    log.debug("Matched IPv4 rule: '{}'!".format(rule))
+                    # XXX Debug noise:
+                    # log.debug("Matched IPv4 rule: '{}'!".format(rule))
                     matched_rules[idx] = True
                     found_it = True
                     break
@@ -260,7 +261,8 @@ class Iptables(FirewallBase):
                 # 3) Source address
                 if rule == active_rule:
                     # Found match!
-                    log.debug("Matched IPv6 rule: '{}'!".format(rule))
+                    # XXX Debug noise:
+                    # log.debug("Matched IPv6 rule: '{}'!".format(rule))
                     matched_rules[idx] = True
                     found_it = True
                     break
