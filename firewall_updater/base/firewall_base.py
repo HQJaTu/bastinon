@@ -20,7 +20,7 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Union
 from datetime import datetime
-from ..rules import Rule
+from ..rules import UserRule
 import logging
 
 log = logging.getLogger(__name__)
@@ -33,17 +33,17 @@ class FirewallBase(ABC):
         pass
 
     @abstractmethod
-    def query_readable(self, rules: List[Rule]) -> List[str]:
+    def query_readable(self, rules: List[UserRule]) -> List[str]:
         pass
 
     @abstractmethod
-    def set(self, rules: List[Rule]) -> list:
+    def set(self, rules: List[UserRule]) -> list:
         pass
 
     @abstractmethod
-    def simulate(self, rules: List[Rule]) -> Union[bool, List[str]]:
+    def simulate(self, rules: List[UserRule]) -> Union[bool, List[str]]:
         pass
 
     @abstractmethod
-    def needs_update(self, rules: List[Rule]) -> bool:
+    def needs_update(self, rules: List[UserRule]) -> bool:
         pass
