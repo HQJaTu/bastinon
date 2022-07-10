@@ -83,13 +83,20 @@ def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
         log.info("All ok")
 
 
-def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bool) -> None:
+def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bool, forced: bool) -> None:
+    if simulation and forced:
+        raise ValueError("Cannot both simulate and force update!")
+
     reader = RuleReader(rules_path)
     rules = reader.read_all_users()
 
     # Test the newly read rules
-    log.info("Changes:")
-    changes = rule_engine.simulate(rules)
+    if not forced:
+        log.info("Changes:")
+        changes = rule_engine.simulate(rules)
+    else:
+        changes = True
+
     if not changes:
         log.info("All ok")
     else:
@@ -98,7 +105,7 @@ def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bo
 
         if not simulation:
             log.info("Proceed with changes:")
-            rule_engine.set(rules)
+            rule_engine.set(rules, forced)
         else:
             log.info("Simulation. Won't proceed with changes:")
 
@@ -111,6 +118,9 @@ def main() -> None:
                         help="(optional) Update rules for single user")
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
+    parser.add_argument('--force', action='store_true',
+                        default=False,
+                        help="Force firewall update")
     args = parser.parse_args()
 
     _setup_logger(args.log_level)
@@ -120,8 +130,8 @@ def main() -> None:
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
     # read_active_rules_from_firewall(iptables_firewall)
-    rules_need_update(iptables_firewall, args.rule_path)
-    # rules_enforcement(iptables_firewall, args.rule_path, simulation=True)
+    #rules_need_update(iptables_firewall, args.rule_path)
+    rules_enforcement(iptables_firewall, args.rule_path, simulation=True, forced=args.force)
 
 
 if __name__ == "__main__":

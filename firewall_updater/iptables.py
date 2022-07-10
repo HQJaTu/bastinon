@@ -91,7 +91,7 @@ class Iptables(FirewallBase):
         ipv4_rules_matched, _, ipv4_rules_to_add, \
         ipv6_rules_matched, _, ipv6_rules_to_add, \
         _ = \
-            self._sync_rules(rules)
+            self._sync_rules(rules, False)
 
         rules_out = []
         if ipv4_rules_matched:
@@ -110,8 +110,9 @@ class Iptables(FirewallBase):
                               for r in ipv6_rules_matched])
         if ipv6_rules_to_add:
             # Note: For transformation, see IPv4 above
-            rules_out.extend([(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, False)
-                              for r in ipv6_rules_to_add])
+            rules_out.extend(
+                [(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, False)
+                 for r in ipv6_rules_to_add])
 
         return rules_out
 
@@ -157,7 +158,7 @@ class Iptables(FirewallBase):
         _, ipv4_rules_to_remove, ipv4_rules_to_add, \
         _, ipv6_rules_to_remove, ipv6_rules_to_add, \
         changes_needed = \
-            self._sync_rules(rules)
+            self._sync_rules(rules, force)
 
         if not changes_needed:
             log.info("No changes needed")
@@ -165,13 +166,27 @@ class Iptables(FirewallBase):
 
         def _exec_helper(rule_out: list) -> Tuple[subprocess.Popen, bytes, bytes]:
             rule_out_str = [str(out) for out in rule_out]
-            log.debug("Executing: '{}'".format(' '.join(rule_out_str)))
+            # XXX Debug noise:
+            # log.debug("Executing: '{}'".format(' '.join(rule_out_str)))
             p = subprocess.Popen(
                 rule_out_str,
                 stdout=subprocess.PIPE)
             output, err = p.communicate()
 
             return p, output, err
+
+        if force:
+            # Forced update
+            # Flush the chains first
+            rule_out = [self._iptables_cmd, "-F", self._chain]
+            p, output, err = _exec_helper(rule_out)
+            if p.returncode != 0:
+                raise RuntimeError("Failed to flush IPtables IPv4 chain {}".format(self._chain))
+
+            rule_out = [self._ip6tables_cmd, "-F", self._chain]
+            p, output, err = _exec_helper(rule_out)
+            if p.returncode != 0:
+                raise RuntimeError("Failed to flush IPtables IPv6 chain {}".format(self._chain))
 
         # IPv4:
         # Apply deletion in reverse order. As we'll progress from highest number to lowest,
@@ -217,7 +232,7 @@ class Iptables(FirewallBase):
         _, ipv4_rules_to_remove, ipv4_rules_to_add, \
         _, ipv6_rules_to_remove, ipv6_rules_to_add, \
         changes_needed = \
-            self._sync_rules(rules)
+            self._sync_rules(rules, False)
 
         if not changes_needed:
             return False
@@ -256,7 +271,7 @@ class Iptables(FirewallBase):
         :param rules: list of user rules
         :return: bool, True = changes needed, False = all rules effective
         """
-        _, _, _, _, _, _, changes_needed = self._sync_rules(rules)
+        _, _, _, _, _, _, changes_needed = self._sync_rules(rules, False)
 
         return changes_needed
 
@@ -264,7 +279,37 @@ class Iptables(FirewallBase):
     # IPtables internal implementation below
     #
 
-    def _sync_rules(self, user_rules: List[UserRule]) -> Tuple[
+    def _sync_rules(self, user_rules: List[UserRule], force: bool) -> Tuple[
+        List[MatchedIptablesRule], list, List[UserRule],
+        List[MatchedIptablesRule], list, List[UserRule], bool
+    ]:
+        if not force:
+            return self._do_sync_rules(user_rules)
+
+        # Forced sync. No matching needed.
+        ipv4_rules_matched = []
+        ipv4_rules_to_add = []
+        ipv4_rules_to_remove = []
+        ipv6_rules_matched = []
+        ipv6_rules_to_add = []
+        ipv6_rules_to_remove = []
+
+        for idx, rule in enumerate(user_rules):
+            if rule.source_address_family == 4:
+                ipv4_rules_to_add.append(rule)
+            elif rule.source_address_family == 6:
+                ipv6_rules_to_add.append(rule)
+
+        # Logging
+        log.debug("Out of {} rules, forcing all to be added. All (possibly) active rules to remove.".format(
+            len(user_rules)
+        ))
+
+        return ipv4_rules_matched, ipv4_rules_to_remove, ipv4_rules_to_add, \
+               ipv6_rules_matched, ipv6_rules_to_remove, ipv6_rules_to_add, \
+               True
+
+    def _do_sync_rules(self, user_rules: List[UserRule]) -> Tuple[
         List[MatchedIptablesRule], list, List[UserRule],
         List[MatchedIptablesRule], list, List[UserRule], bool
     ]:
@@ -357,13 +402,6 @@ class Iptables(FirewallBase):
         return ipv4_rules_matched, ipv4_rules_to_remove, ipv4_rules_to_add, \
                ipv6_rules_matched, ipv6_rules_to_remove, ipv6_rules_to_add, \
                matches_found != len(matched_rules)
-
-    def _clear_chain(self):
-        return
-        p = subprocess.Popen(
-            [self._iptables_cmd, "-A", self._chain, "-p", "tcp", "-m", "tcp", "--dport", "22", "-j", "ACCEPT"],
-            stdout=subprocess.PIPE)
-        output, err = p.communicate()
 
     def _read_chain(self, ip_version: int) -> List[IptablesRule]:
         if ip_version == 4:

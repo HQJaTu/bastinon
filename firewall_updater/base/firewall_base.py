@@ -48,7 +48,7 @@ class FirewallBase(ABC):
         """
         Set rules to firewall
         :param rules: List of firewall rules to set
-        :param force: Force flush the chain with new rules
+        :param force: Force set all rules
         :return:
         """
         pass
