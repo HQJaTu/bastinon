@@ -120,8 +120,8 @@ def main() -> None:
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
     # read_active_rules_from_firewall(iptables_firewall)
-    # rules_need_update(iptables_firewall, args.rule_path)
-    rules_enforcement(iptables_firewall, args.rule_path, simulation=True)
+    rules_need_update(iptables_firewall, args.rule_path)
+    # rules_enforcement(iptables_firewall, args.rule_path, simulation=True)
 
 
 if __name__ == "__main__":
