@@ -7,6 +7,7 @@ use warnings;
 use CGI::Carp qw(fatalsToBrowser);
 use Mojolicious::Lite;
 use Mojo::HTTPStatus qw(OK MOVED_PERMANENTLY FOUND SEE_OTHER FORBIDDEN NOT_FOUND NOT_ACCEPTABLE);
+use Mojo::JSON qw(decode_json encode_json);
 use Net::DBus;
 
 use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Firewall";
@@ -78,6 +79,38 @@ get '/api/rules' => sub {
     # Return
     my $json = {
         "user"  => $user,
+        "rules" => [ @rules ]
+    };
+    $c->render(json => $json, status => OK);
+};
+
+put '/api/rules/:id' => sub {
+    # Docs: https://restfulapi.net/rest-put-vs-post/
+    my ($c) = @_;
+
+    my $rule_id = $c->param('id');
+    my $body_json = decode_json($c->req->body);
+    my $manager = _get_dbus();
+    my $user = getpwuid($<);
+    app->log->debug('Service: ' . $body_json->{'service'});
+    app->log->debug('Source : ' . $body_json->{'source'});
+    app->log->debug('Comment: ' . $body_json->{'comment'});
+    app->log->debug('Expiry : ' . $body_json->{'expiry'});
+    my $new_rule_id = $manager->UpsertRule(
+        $rule_id,
+        $user,
+        $body_json->{'service'},
+        $body_json->{'source'},
+        $body_json->{'comment'},
+        $body_json->{'expiry'}
+    );
+
+    my @rules = @{$manager->GetRules($user)};
+
+    # Return
+    my $json = {
+        "user"  => $user,
+        "rule_id" => $new_rule_id,
         "rules" => [ @rules ]
     };
     $c->render(json => $json, status => OK);
@@ -190,6 +223,7 @@ update_rules = () => {
     }
 
     const table_div = $('#rules_table_holder');
+    let update_button_ids = [];
 
     // Iterate all rules
     let html = '';
@@ -217,6 +251,9 @@ update_rules = () => {
     <button id="delete_rule_btn_${rule_id}">Delete</button>
   </td>
 </tr>`;
+
+        // Update-button:
+        update_button_ids.push(rule_id)
     }
 
     // Add new row to bottom
@@ -226,7 +263,7 @@ update_rules = () => {
         service_opts += `<option value="${service[0]}">${service[1]}</option>`;
     }
     html += `<tr>
-  <td><select id="protocol_${rule_id}" class="service_input">${service_opts}</select></td>
+  <td><select id="service_${rule_id}" class="service_input">${service_opts}</select></td>
   <td><input type="text" id="source_${rule_id}" required class="source_input"></td>
   <td><input type="text" id="comment_${rule_id}" class="comment_input"></td>
   <td><input type="datetime-local" id="expiry_${rule_id}" class="expiry_input"></td>
@@ -242,13 +279,54 @@ update_rules = () => {
     <th>Service</th>
     <th>Source address</th>
     <th>Comment</th>
-    <th>Expiry</th>
+    <th>Expiry (UTC)</th>
     <th>Rule active</th>
     <th>Action</th>
 </tr>
 ${html}
 </table>`);
+
+    // Buttons:
+    for (const rule_id of update_button_ids) {
+        const button_id = `update_rule_btn_${rule_id}`;
+        $(`#${button_id}`).click(() => {
+            console.log(`Update button "${rule_id}" clicked!`);
+            const service = $(`#service_${rule_id}`).val();
+            const source = $(`#source_${rule_id}`).val();
+            const comment = $(`#comment_${rule_id}`).val();
+            const expiry = $(`#expiry_${rule_id}`).val();
+            console.log(`Service: "${service}"`);
+            console.log(`Source: "${source}"`);
+            console.log(`Comment: "${comment}"`);
+            console.log(`Expiry: "${expiry}"`);
+            upsert_rule(rule_id, service, source, comment, expiry)
+        });
+    }
 }
+
+upsert_rule = (rule_id, service, source, comment, expiry) => {
+    $.ajax({
+        url: `${window.location.href}/api/rules/${rule_id}`,
+        method: 'put',
+        context: document.body,
+        data: JSON.stringify({
+            'service': service,
+            'source': source,
+            'comment': comment,
+            'expiry': expiry
+        }),
+        dataType: "json",
+        contentType : 'application/json',
+        processData : false
+    }).done((data) => {
+        console.log(`ok, upsert rule ${rule_id} ok`);
+        bastinon_rules = data['rules'];
+
+        update_rules();
+    });
+}
+
+// end JavaScript
 </script>
 </body>
 </html>
