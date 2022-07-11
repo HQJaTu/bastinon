@@ -159,9 +159,21 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="a(ssisvb)",
+                    in_signature=None, out_signature="as",
                     sender_keyword='sender')
-    def GetRules(self, user: str, sender=None) -> List[Tuple[str, str, int, str, Union[str, None], bool]]:
+    def GetProtocols(self, sender=None) -> list:
+        # This is just for UI. Return supported TCP-protocols.
+        reader = ServiceReader(self._firewall_rules_path)
+
+        log.info("GetProtocols(): Returning list of {} TCP-protocols".format(len(reader.PROTOCOLS)))
+
+        return reader.PROTOCOLS
+
+    # noinspection PyPep8Naming
+    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
+                    in_signature="s", out_signature="a(sssisvb)",
+                    sender_keyword='sender')
+    def GetRules(self, user: str, sender=None) -> List[Tuple[str, str, str, int, str, Union[str, None], bool]]:
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
@@ -182,10 +194,19 @@ class FirewallUpdaterService(service.Object):
         active_rules = self._firewall.query(rules)
 
         # Rules
+        rules_out = []
         if user:
-            rules_out = [r for r in active_rules if r[0] == user]
+            # rules_out = [r for r in active_rules if r[0] == user]
+            for r in active_rules:
+                if r[0] != user:
+                    continue
+                rule = (str(hash(r)), ) + r
+                rules_out.append(rule)
         else:
-            rules_out = active_rules
+            # rules_out = active_rules
+            for r in active_rules:
+                rule = (str(hash(r)), ) + r
+                rules_out.append(rule)
 
         log.info(
             "GetRules({}) [{}]: Returning list of {} firewall rules".format(user_login, user_full_name, len(rules_out)))
