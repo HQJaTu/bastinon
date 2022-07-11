@@ -271,7 +271,7 @@ class FirewallUpdaterService(service.Object):
             log.debug("Requested insert for user '{}', service: '{}'".format(user, service_code))
 
         reader = RuleReader(self._firewall_rules_path)
-        rules = reader.read(str(user)) # Need to shake off dbus.String()
+        rules = reader.read(str(user))  # Need to shake off dbus.String()
 
         # Match user given service
         if not service_code in reader.all_services:
@@ -331,7 +331,35 @@ class FirewallUpdaterService(service.Object):
         :param sender: D-Bus sender connection
         :return: str, hash of inserted/updated rule
         """
-        pass
+        if not existing_rule_hash:
+            raise ValueError("Need rule hash!")
+        if not user:
+            raise ValueError("Need user!")
+
+        log.debug("Requested deleting for user '{}' with hash: {}".format(user, existing_rule_hash))
+
+        reader = RuleReader(self._firewall_rules_path)
+        rules = reader.read(str(user))  # Need to shake off dbus.String()
+
+        # Find the given rule
+        matching_hash_idx = None
+        for rule_idx, rule in enumerate(rules):
+            rule_hash = self._rule_hash(rule)
+            if existing_rule_hash == rule_hash:
+                # Yeah! Found it.
+                matching_hash_idx = rule_idx
+                break
+        if matching_hash_idx is None:
+            raise ValueError("Failed to delete! Rule hash '{}' not found.".format(existing_rule_hash))
+
+        # Yank the rules off from the list
+        del rules[matching_hash_idx]
+
+        # Go write!
+        writer = RuleWriter(self._firewall_rules_path)
+        writer.write(user, rules)
+
+        return
 
     @staticmethod
     def _rule_hash(r: UserRule) -> str:

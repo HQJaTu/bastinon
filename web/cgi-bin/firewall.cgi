@@ -92,10 +92,6 @@ put '/api/rules/:id' => sub {
     my $body_json = decode_json($c->req->body);
     my $manager = _get_dbus();
     my $user = getpwuid($<);
-    app->log->debug('Service: ' . $body_json->{'service'});
-    app->log->debug('Source : ' . $body_json->{'source'});
-    app->log->debug('Comment: ' . $body_json->{'comment'});
-    app->log->debug('Expiry : ' . $body_json->{'expiry'});
     my $new_rule_id = $manager->UpsertRule(
         $rule_id,
         $user,
@@ -111,6 +107,28 @@ put '/api/rules/:id' => sub {
     my $json = {
         "user"  => $user,
         "rule_id" => $new_rule_id,
+        "rules" => [ @rules ]
+    };
+    $c->render(json => $json, status => OK);
+};
+
+del '/api/rules/:id' => sub {
+    # Docs: https://restfulapi.net/rest-put-vs-post/
+    my ($c) = @_;
+
+    my $rule_id = $c->param('id');
+    my $manager = _get_dbus();
+    my $user = getpwuid($<);
+    my $new_rule_id = $manager->DeleteRule(
+        $rule_id,
+        $user
+    );
+
+    my @rules = @{$manager->GetRules($user)};
+
+    # Return
+    my $json = {
+        "user"  => $user,
         "rules" => [ @rules ]
     };
     $c->render(json => $json, status => OK);
@@ -188,7 +206,7 @@ $(document).ready(() => {
         method: 'get',
         context: document.body
     }).done((data) => {
-        console.log("ok, got services");
+        console.log("ready(): got services");
         bastinon_services = data['services'];
 
         update_rules();
@@ -207,7 +225,7 @@ load_rules = (update_ui) => {
         method: 'get',
         context: document.body
     }).done((data) => {
-        console.log("ok, got rules");
+        console.log("load_rules(): got rules");
         bastinon_rules = data['rules'];
 
         if (update_ui) {
@@ -218,7 +236,8 @@ load_rules = (update_ui) => {
 
 update_rules = () => {
     if (!bastinon_rules || !bastinon_services) {
-        console.log(`Fail! Missing data at this point.`);
+        // XXX Debug:
+        //console.log(`Fail! Missing data at this point.`);
         return;
     }
 
@@ -288,18 +307,29 @@ ${html}
 
     // Buttons:
     for (const rule_id of update_button_ids) {
-        const button_id = `update_rule_btn_${rule_id}`;
-        $(`#${button_id}`).click(() => {
-            console.log(`Update button "${rule_id}" clicked!`);
+        const update_button_id = `update_rule_btn_${rule_id}`;
+        const delete_button_id = `delete_rule_btn_${rule_id}`;
+        $(`#${update_button_id}`).click(() => {
+            // XXX Debug:
+            //console.log(`Update button "${rule_id}" clicked!`);
             const service = $(`#service_${rule_id}`).val();
             const source = $(`#source_${rule_id}`).val();
             const comment = $(`#comment_${rule_id}`).val();
-            const expiry = $(`#expiry_${rule_id}`).val();
-            console.log(`Service: "${service}"`);
-            console.log(`Source: "${source}"`);
-            console.log(`Comment: "${comment}"`);
-            console.log(`Expiry: "${expiry}"`);
+            let expiry = $(`#expiry_${rule_id}`).val();
+            if (expiry && !expiry.match(/T\d{2}:\d{2}:\d{2}$/)) {
+                expiry += ':00';
+            }
             upsert_rule(rule_id, service, source, comment, expiry)
+        });
+        $(`#${delete_button_id}`).click(() => {
+            // XXX Debug:
+            //console.log(`Delete button "${rule_id}" clicked!`);
+            const service = $(`#service_${rule_id}`).val();
+            const source = $(`#source_${rule_id}`).val();
+            const confirm_message = `Really want to delete ${service} rule allowing ${source}?`;
+            if (confirm(confirm_message)) {
+                delete_rule(rule_id)
+            }
         });
     }
 }
@@ -320,6 +350,19 @@ upsert_rule = (rule_id, service, source, comment, expiry) => {
         processData : false
     }).done((data) => {
         console.log(`ok, upsert rule ${rule_id} ok`);
+        bastinon_rules = data['rules'];
+
+        update_rules();
+    });
+}
+
+delete_rule = (rule_id) => {
+    $.ajax({
+        url: `${window.location.href}/api/rules/${rule_id}`,
+        method: 'delete',
+        context: document.body
+    }).done((data) => {
+        console.log(`ok, delete rule ${rule_id} ok`);
         bastinon_rules = data['rules'];
 
         update_rules();
