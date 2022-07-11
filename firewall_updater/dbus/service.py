@@ -97,8 +97,8 @@ class FirewallUpdaterService(service.Object):
             user_full_name = unix_user_passwd_record.pw_name
             if unix_user_passwd_record.pw_gecos:
                 gecos = unix_user_passwd_record.pw_gecos.split(',')
-                if gecos:
-                    user_full_name = gecos
+                if gecos[0]:
+                    user_full_name = gecos[0]
         else:
             user_id = None
             user_login = None
@@ -202,28 +202,28 @@ class FirewallUpdaterService(service.Object):
             # - Expiry is either str or bool, D-Bus cannot return None
 
             rule_hash = self._rule_hash(r[0])
-            source = str(r.source)
-            if r.comment:
-                comment = r.comment
+            source = str(r[0].source)
+            if r[0].comment:
+                comment = r[0].comment
             else:
                 comment = False
-            if r.expiry:
+            if r[0].expiry:
                 # ISO 8601: https://tc39.es/ecma262/#sec-date-time-string-format
                 # YYYY-MM-DDTHH:mm:ss.sssZ
-                expiry = r.expiry.isoformat()
+                expiry = r[0].expiry.isoformat()
             else:
                 expiry = False
 
-            return rule_hash, r.owner, r.proto, r.port, source, comment, expiry, r[1]
+            return rule_hash, r[0].owner, r[0].proto, r[0].port, source, comment, expiry, r[1]
 
         # Rules
         rules_out = []
         if user:
-            # rules_out = [r for r in active_rules if r == user]
+            # rules_out = [r for r in active_rules if r[0] == user]
             #           user,prot,port,src, comment,          expiry,   active
             # r = Tuple[str, str, int, str, Union[str, None], datetime, bool]
             for r in active_rules:
-                if r.owner != user:
+                if r[0].owner != user:
                     continue
                 rule = _rule_tuple_helper(r)
                 rules_out.append(rule)
