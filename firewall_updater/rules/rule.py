@@ -8,11 +8,18 @@ class Rule:
     PROTOCOL_UDP = r'udp'
     PROTOCOLS = [PROTOCOL_TCP, PROTOCOL_UDP]
 
+    PORTS = {
+        PROTOCOL_TCP: (1, 65535),
+        PROTOCOL_UDP: (1, 65535),
+    }
+
     def __init__(self, proto: str, port: int, source_address, expiry: datetime = None, comment: str = None):
         if proto not in self.PROTOCOLS:
             raise ValueError("Proto '{}' not allowed! Known are: {}".format(proto, ', '.join(self.PROTOCOLS)))
-        if port < 1:
-            raise ValueError("Port {} not allowed! Must be between 1 and 65535!".format(port))
+        if port < self.PORTS[proto][0] or port < self.PORTS[proto][1]:
+            raise ValueError("Port {} not allowed! Must be between {} and {}!".format(
+                port, self.PORTS[proto][0], self.PORTS[proto][1]
+            ))
         self.proto = proto
         self.port = port
         self.source_address_family, self.source_address = self._parse_address(source_address)
@@ -54,7 +61,7 @@ class Rule:
 
         if comment:
             if not self.comment or self.comment != comment:
-                #print("Rule comment won't match! me: '{}', other: '{}'".format(self.comment, comment))
+                # print("Rule comment won't match! me: '{}', other: '{}'".format(self.comment, comment))
                 return False
 
         return True
