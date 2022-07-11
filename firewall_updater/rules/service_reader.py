@@ -29,9 +29,6 @@ log = logging.getLogger(__name__)
 
 class ServiceReader:
     SERVICES_PATH = r"services"
-    PROTOCOL_TCP = r'tcp'
-    PROTOCOL_UDP = r'udp'
-    PROTOCOLS = [PROTOCOL_TCP, PROTOCOL_UDP]
 
     def __init__(self, rule_path: str):
         services_path = "{}/{}".format(rule_path, self.SERVICES_PATH)
@@ -57,7 +54,8 @@ class ServiceReader:
         return services_out
 
     def _read_service_definition(self, service_code: str, filename: str) -> Service:
-        log.debug("Reading service file: {}".format(filename))
+        # XXX Debug noise:
+        # log.debug("Reading service file: {}".format(filename))
         root = etree.parse(filename)
         schema_filename = "{}/xml-schemas/service.xsd".format(sys.prefix)
         schema_doc = etree.parse(schema_filename)
@@ -80,7 +78,7 @@ class ServiceReader:
                 raise ValueError("Need to have 'protocol' in service-definition! Service file: {}".format(filename))
             if 'port' not in elem.attrib:
                 raise ValueError("Need to have 'port' in service-definition! Service file: {}".format(filename))
-            if elem.attrib['protocol'] not in self.PROTOCOLS:
+            if elem.attrib['protocol'] not in Service.PROTOCOLS:
                 raise ValueError("Unknown protocol '{}'! Service file: {}".format(elem.attrib['protocol'], filename))
 
             ip_protocol = elem.attrib['protocol']
