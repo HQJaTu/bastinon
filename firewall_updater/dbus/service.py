@@ -97,8 +97,8 @@ class FirewallUpdaterService(service.Object):
             user_full_name = unix_user_passwd_record.pw_name
             if unix_user_passwd_record.pw_gecos:
                 gecos = unix_user_passwd_record.pw_gecos.split(',')
-                if gecos[0]:
-                    user_full_name = gecos[0]
+                if gecos:
+                    user_full_name = gecos
         else:
             user_id = None
             user_login = None
@@ -201,31 +201,29 @@ class FirewallUpdaterService(service.Object):
             # - Comment is either str or bool, D-Bus cannot return None
             # - Expiry is either str or bool, D-Bus cannot return None
 
-            # 64-bit unsigned integer as hex, hash() returns signed
-            r_tuple = (r[0].owner, r[0].proto, r[0].port, r[0].source, r[0].comment, r[0].expiry)
-            rule_hash = hex(hash(r_tuple) & 0xffffffffffffffff)[2:]
-
-            source = str(r[0].source)
-            if r[0].comment:
-                comment = r[0].comment
+            rule_hash = self._rule_hash(r[0])
+            source = str(r.source)
+            if r.comment:
+                comment = r.comment
             else:
                 comment = False
-            if r[0].expiry:
+            if r.expiry:
                 # ISO 8601: https://tc39.es/ecma262/#sec-date-time-string-format
                 # YYYY-MM-DDTHH:mm:ss.sssZ
-                expiry = r[0].expiry.isoformat()
+                expiry = r.expiry.isoformat()
             else:
                 expiry = False
-            return rule_hash, r[0].owner, r[0].proto, r[0].port, source, comment, expiry, r[1]
+
+            return rule_hash, r.owner, r.proto, r.port, source, comment, expiry, r[1]
 
         # Rules
         rules_out = []
         if user:
-            # rules_out = [r for r in active_rules if r[0] == user]
+            # rules_out = [r for r in active_rules if r == user]
             #           user,prot,port,src, comment,          expiry,   active
             # r = Tuple[str, str, int, str, Union[str, None], datetime, bool]
             for r in active_rules:
-                if r[0].owner != user:
+                if r.owner != user:
                     continue
                 rule = _rule_tuple_helper(r)
                 rules_out.append(rule)
@@ -239,3 +237,61 @@ class FirewallUpdaterService(service.Object):
             "GetRules({}) [{}]: Returning list of {} firewall rules".format(user_login, user_full_name, len(rules_out)))
 
         return rules_out
+
+    # noinspection PyPep8Naming
+    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
+                    in_signature="sssisvv", out_signature="s",
+                    sender_keyword='sender')
+    def UpsertRule(self,
+                   existing_rule_hash: str,
+                   user: str,
+                   proto: str,
+                   port: int,
+                   source: str,
+                   comment: str,
+                   expiry: str,
+                   sender=None) -> str:
+        """
+        Update or insert a rule
+        :param existing_rule_hash: hash for existing rule, empty string if inserting
+        :param user: whose rules we're inserting
+        :param proto: protocol
+        :param port: port
+        :param source: source address
+        :param comment: optional comment
+        :param expiry: optional rule expiry
+        :param sender: D-Bus sender connection
+        :return: str, hash of inserted/updated rule
+        """
+        pass
+
+    # noinspection PyPep8Naming
+    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
+                    in_signature="ss", out_signature=None,
+                    sender_keyword='sender')
+    def DeleteRule(self,
+                   existing_rule_hash: str,
+                   user: str,
+                   sender=None) -> None:
+        """
+        Delete existing rule
+        :param existing_rule_hash: hash for existing rule
+        :param user: whose rules we're inserting
+        :param sender: D-Bus sender connection
+        :return: str, hash of inserted/updated rule
+        """
+        pass
+
+    @staticmethod
+    def _rule_hash(r: UserRule) -> str:
+        """
+        Hash of UserRule as a string
+        :param r: rule to be hashed
+        :return: string
+        """
+
+        # 64-bit unsigned integer as hex, hash() returns signed. Skip 0x at the beginning.
+        r_tuple = (r.owner, r.proto, r.port, r.source, r.comment, r.expiry)
+        rule_hash = hex(hash(r_tuple) & 0xffffffffffffffff)[2:]
+
+        return rule_hash

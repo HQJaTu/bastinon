@@ -38,9 +38,12 @@ Policy install (as _root_):
    Response will contain published interface:
     ```text
    NAME                   TYPE      SIGNATURE RESULT/VALUE FLAGS
-   .GetRules              method    s         a(ssisvb)    -
+   .DeleteRule            method    ss        -            -
+   .GetProtocols          method    -         as           -
+   .GetRules              method    s         a(sssisvvb)  -
    .GetServices           method    -         as           -
    .Ping                  method    -         s            -
+   .UpsertRule            method    sssisvv   s            -
     ```
 5. Test service with a ping:
     ```bash
