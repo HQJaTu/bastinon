@@ -120,6 +120,14 @@ input[type=number] {
 .comment_input {
     width: 300px;
 }
+.expiry_input {
+    width: 200px;
+}
+.effective_column {
+}
+.action_input {
+    width: 150px;
+}
 </style>
 </head>
 
@@ -129,6 +137,7 @@ Hello <%= $name %>
 <div id="rules_table_holder">
     <h2>... Loading rules ...</h2>
 </div>
+<br/>
 <div id="buttons">
     <button id="update_btn">Update</button>
 </div>
@@ -191,7 +200,7 @@ update_rules = () => {
     let html = '';
     for (const rule of bastinon_rules) {
         const rule_id = rule[0];
-        const rule_effective = rule[6] ? "Active" : "inactive";
+        const rule_effective = rule[7] ? "Active" : "inactive";
         let protocol_opts = '';
         for (const protocol of bastinon_protocols) {
             if (protocol === rule[2]) {
@@ -207,13 +216,41 @@ update_rules = () => {
   <td><input type="number" id="port_${rule_id}" required value="${rule[3]}" max="1" min="65535" class="port_input"></td>
   <td><input type="text" id="source_${rule_id}" required value="${rule[4]}" class="source_input"></td>
   <td><input type="text" id="comment_${rule_id}" value="${rule[5]}" class="comment_input"></td>
-  <td>${rule_effective}</td>
-  <td class="center_align"><button id="delete_btn_${rule_id}">Delete</button></td>
+  <td><input type="datetime-local" id="expiry_${rule_id}" value="${rule[6]}" class="expiry_input"></td>
+  <td class="effective_column">${rule_effective}</td>
+  <td class="center_align" class="action_input"><button id="delete_rule_btn_${rule_id}">Delete</button></td>
 </tr>`;
     }
 
+    // Add new row to bottom
+    const rule_id = "new";
+    let protocol_opts = '<option value="">-Select-</option>';
+    for (const protocol of bastinon_protocols) {
+        protocol_opts += `<option value="${protocol}">${protocol.toUpperCase()}</option>`;
+    }
+    html += `<tr>
+  <td><select id="protocol_${rule_id}" class="protocol_input">${protocol_opts}</select></td>
+  <td><input type="number" id="port_${rule_id}" required max="1" min="65535" class="port_input"></td>
+  <td><input type="text" id="source_${rule_id}" required class="source_input"></td>
+  <td><input type="text" id="comment_${rule_id}" class="comment_input"></td>
+  <td><input type="datetime-local" id="expiry_${rule_id}" class="expiry_input"></td>
+  <td class="effective_column">new</td>
+  <td class="center_align" class="action_input"><button id="add_rule_btn">Add</button></td>
+</tr>`;
+
     // Re-do the <div/>-contents with a freshly created table
-    table_div.html(`<table id="rules_table">${html}</table>`);
+    table_div.html(`<table id="rules_table">
+<tr>
+    <th>Protocol</th>
+    <th>Port</th>
+    <th>Source address</th>
+    <th>Comment</th>
+    <th>Expiry</th>
+    <th>Rule active</th>
+    <th>Action</th>
+</tr>
+${html}
+</table>`);
 }
 </script>
 </body>
