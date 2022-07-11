@@ -508,7 +508,7 @@ num  target     prot opt source               destination
             if destination_chain != "ACCEPT":
                 raise ValueError("IPchain output error! Rule isn't an ACCEPT-rule, "
                                  "is a '{}', rule: '{}'".format(destination_chain, line.strip()))
-            if proto not in ServiceReader.PROTOCOLS:
+            if proto not in Service.PROTOCOLS:
                 raise ValueError("IPchain output error! Rule has unsupported proto '{}', "
                                  "rule: '{}'".format(proto, line.strip()))
             # Parse destination, it contains all possible options of iptables-rule

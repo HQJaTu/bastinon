@@ -23,7 +23,7 @@ import os
 import sys
 from typing import Optional, Tuple
 import argparse
-from firewall_updater.rules import RuleReader, ServiceReader
+from firewall_updater.rules import RuleReader, RuleWriter, ServiceReader, UserRule
 from firewall_updater import FirewallBase, Iptables
 import logging
 
@@ -119,11 +119,22 @@ def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bo
             log.info("Simulation. Won't proceed with changes:")
 
 
-def add_rule(user: str, service: str, source: str, comment: str, rules_path: str) -> None:
+def add_rule(user: str, service_code: str, source: str, comment: str, rules_path: str) -> None:
     reader = RuleReader(rules_path)
     rules = reader.read(user)
 
-    # new_rule = UserRule(user, )
+    # Match user given service
+    if not service_code in reader.all_services:
+        raise ValueError("Unknown service '{}'!".format(service_code))
+    service = reader.all_services[service_code]
+
+    # Create the new rule to be appended
+    new_rule = UserRule(user, service, source, comment)
+
+    # Go write!
+    rules.append(new_rule)
+    writer = RuleWriter(rules_path)
+    writer.write(user, rules)
 
 
 def main() -> None:
@@ -162,7 +173,7 @@ def main() -> None:
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
     # read_active_rules_from_firewall(iptables_firewall, args.rule_path)
     # rules_need_update(iptables_firewall, args.rule_path)
-    rules_enforcement(iptables_firewall, args.rule_path, simulation=False, forced=args.force)
+    rules_enforcement(iptables_firewall, args.rule_path, simulation=True, forced=args.force)
 
 
 if __name__ == "__main__":

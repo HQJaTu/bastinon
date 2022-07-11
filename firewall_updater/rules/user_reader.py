@@ -19,7 +19,7 @@
 
 import os
 import sys
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 from lxml import etree
 from pwd import getpwnam
 from datetime import datetime
@@ -82,16 +82,17 @@ class RuleReader:
         if not self.has_rules_for(user):
             raise ValueError("Cannot read rules for user {}! No rules found.".format(user))
 
-        reader = ServiceReader(self._path)
-        services = reader.read_all()
-        filename = self._rule_filename(user)
+        if not self.all_services:
+            reader = ServiceReader(self._path)
+            self.all_services = reader.read_all()
 
-        rules = self._user_rule_reader(user, filename, services)
+        filename = self._rule_filename(user)
+        rules = self._user_rule_reader(user, filename, self.all_services)
 
         return rules
 
     @staticmethod
-    def _user_rule_reader(user: str, user_rules_filename: str, services: List[Service]) -> List[UserRule]:
+    def _user_rule_reader(user: str, user_rules_filename: str, services: Dict[str, Service]) -> List[UserRule]:
         log.debug("For user {}, reading rule file: {}".format(user, user_rules_filename))
         root = etree.parse(user_rules_filename)
         schema_filename = "{}/xml-schemas/user_rule.xsd".format(sys.prefix)
