@@ -23,7 +23,7 @@ import os
 import sys
 from typing import Optional, Tuple
 import argparse
-from firewall_updater.rules import RuleReader
+from firewall_updater.rules import RuleReader, ServiceReader
 from firewall_updater import FirewallBase, Iptables
 import logging
 
@@ -106,16 +106,24 @@ def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bo
         changes = True
 
     if not changes:
-        log.info("All ok")
+        log.info("All ok, no changes")
     else:
         from pprint import pprint
         pprint(changes)
 
         if not simulation:
-            log.info("Proceed with changes:")
+            log.warning("Proceed with changes:")
             rule_engine.set(rules, forced)
+            log.info("Changes done!")
         else:
             log.info("Simulation. Won't proceed with changes:")
+
+
+def add_rule(user: str, service: str, source: str, comment: str, rules_path: str) -> None:
+    reader = RuleReader(rules_path)
+    rules = reader.read(user)
+
+    # new_rule = UserRule(user, )
 
 
 def main() -> None:
@@ -129,17 +137,32 @@ def main() -> None:
     parser.add_argument('--force', action='store_true',
                         default=False,
                         help="Force firewall update")
+    parser.add_argument('--add-rule-user',
+                        help="Add new firewall rule to user")
+    parser.add_argument('--rule-service',
+                        help="Service for a rule")
+    parser.add_argument('--rule-source-address',
+                        help="Source address for a rule")
+    parser.add_argument('--rule-comment',
+                        help="Comment for a rule")
     args = parser.parse_args()
 
     _setup_logger(args.log_level)
 
     log.info('Starting up ...')
 
-    iptables_firewall = Iptables("Friends-Firewall-INPUT")
+    if args.add_rule_user:
+        add_rule(args.add_rule_user, args.rule_service, args.rule_source_address, args.rule_comment,
+                 args.rule_path)
+        exit(0)
+
+    reader = ServiceReader(args.rule_path)
+    iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT")
+
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
     # read_active_rules_from_firewall(iptables_firewall, args.rule_path)
     # rules_need_update(iptables_firewall, args.rule_path)
-    rules_enforcement(iptables_firewall, args.rule_path, simulation=True, forced=args.force)
+    rules_enforcement(iptables_firewall, args.rule_path, simulation=False, forced=args.force)
 
 
 if __name__ == "__main__":

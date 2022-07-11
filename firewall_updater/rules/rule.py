@@ -1,27 +1,13 @@
 from datetime import datetime
 from typing import Tuple, Union
 import ipaddress
+from .service import Service
 
 
 class Rule:
-    PROTOCOL_TCP = r'tcp'
-    PROTOCOL_UDP = r'udp'
-    PROTOCOLS = [PROTOCOL_TCP, PROTOCOL_UDP]
 
-    PORTS = {
-        PROTOCOL_TCP: (1, 65535),
-        PROTOCOL_UDP: (1, 65535),
-    }
-
-    def __init__(self, proto: str, port: int, source_address, expiry: datetime = None, comment: str = None):
-        if proto not in self.PROTOCOLS:
-            raise ValueError("Proto '{}' not allowed! Known are: {}".format(proto, ', '.join(self.PROTOCOLS)))
-        if port < self.PORTS[proto][0] or port < self.PORTS[proto][1]:
-            raise ValueError("Port {} not allowed! Must be between {} and {}!".format(
-                port, self.PORTS[proto][0], self.PORTS[proto][1]
-            ))
-        self.proto = proto
-        self.port = port
+    def __init__(self, service: Service, source_address, expiry: datetime = None, comment: str = None):
+        self.service = service
         self.source_address_family, self.source_address = self._parse_address(source_address)
         self.expiry = expiry
         self.comment = comment
@@ -40,16 +26,8 @@ class Rule:
 
         return False
 
-    def matches(self, proto: str, port: int, source_address, comment: str = None) -> bool:
-        if proto not in self.PROTOCOLS:
-            raise ValueError("Proto '{}' not allowed! Known are: {}".format(proto, ', '.join(self.PROTOCOLS)))
-        if port < 1:
-            raise ValueError("Port {} not allowed! Must be between 1 and 65535!".format(port))
-
-        if self.proto != proto:
-            return False
-
-        if self.port != port:
+    def matches(self, service: Service, source_address, comment: str = None) -> bool:
+        if self.service.name != service.name:
             return False
 
         address_family, source = self._parse_address(source_address)
@@ -91,9 +69,9 @@ class Rule:
         raise ValueError("Failed to parse IP-address: '{}'".format(address_in))
 
     def __str__(self) -> str:
-        return "IPv{} rule: {}/{} allowed from {}".format(
-            self.source_address_family, self.proto.upper(), self.port, self.source
+        return "IPv{} rule: {} allowed from {}".format(
+            self.source_address_family, self.service, self.source
         )
 
     def __eq__(self, other: 'Rule'):
-        return self.matches(other.proto, other.port, other.source_address, comment=other.comment)
+        return self.matches(other.service, other.source_address, comment=other.comment)

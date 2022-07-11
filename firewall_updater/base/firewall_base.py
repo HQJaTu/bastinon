@@ -18,9 +18,9 @@
 # Copyright (c) Jari Turkia
 
 from abc import ABC, abstractmethod
-from typing import Tuple, List, Union
+from typing import Tuple, List, Union, Dict
 from datetime import datetime
-from ..rules import UserRule
+from ..rules import UserRule, Service
 import logging
 
 log = logging.getLogger(__name__)
@@ -28,10 +28,16 @@ log = logging.getLogger(__name__)
 
 class FirewallBase(ABC):
 
+    def __init__(self, services: Dict[str, Service]):
+        self.services = services
+
     @abstractmethod
     def query(self, rules: List[UserRule]) -> List[Tuple[UserRule, bool]]:
         """
-        Query for currently active firewall rules
+        Query for currently active firewall rules.
+        Match the rules against all users' rules.
+        :param rules: Users' rules
+        :param services: All servies
         :return: list of tuples, tuple: user rule object, rule in effect
         """
         pass
@@ -39,7 +45,10 @@ class FirewallBase(ABC):
     @abstractmethod
     def query_readable(self, rules: List[UserRule]) -> List[str]:
         """
-        Query for currently active firewall rules
+        Query for currently active firewall rules.
+        Match the rules against all users' rules.
+        :param rules: Users' rules
+        :param services: All servies
         :return: list of strings
         """
         pass

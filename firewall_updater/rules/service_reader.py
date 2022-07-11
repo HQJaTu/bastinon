@@ -19,7 +19,9 @@
 
 import os
 import sys
+from typing import List, Dict
 from lxml import etree
+from .service import Service
 import logging
 
 log = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ class ServiceReader:
 
         self._path = rule_path
 
-    def read_all(self) -> dict:
+    def read_all(self) -> Dict[str, Service]:
         services_out = {}
         services_path = "{}/{}".format(self._path, self.SERVICES_PATH)
         for item in os.listdir(services_path):
@@ -48,13 +50,13 @@ class ServiceReader:
                 continue
             xml_file = os.path.join(services_path, item)
             if os.path.isfile(xml_file):
-                service_definition = self._read_services(xml_file)
                 service_name = item.replace('.xml', '')
+                service_definition = self._read_service_definition(service_name, xml_file)
                 services_out[service_name] = service_definition
 
         return services_out
 
-    def _read_services(self, filename: str) -> list:
+    def _read_service_definition(self, service_code: str, filename: str) -> Service:
         log.debug("Reading service file: {}".format(filename))
         root = etree.parse(filename)
         schema_filename = "{}/xml-schemas/service.xsd".format(sys.prefix)
@@ -63,9 +65,13 @@ class ServiceReader:
         if not schema.validate(root):
             raise ValueError("Service-XML {} is not valid! Error: {}".format(filename, schema.error_log))
 
-        service_definition = []
+        service_name = None
+        service_definition = {}
         for elem in root.iter():
             if elem.tag == "service":
+                continue
+            if elem.tag == "short":
+                service_name = elem.text
                 continue
             if elem.tag != "port":
                 continue
@@ -79,8 +85,10 @@ class ServiceReader:
 
             ip_protocol = elem.attrib['protocol']
             port = int(elem.attrib['port'])
-            service = (ip_protocol, port)
 
-            service_definition.append(service)
+            if ip_protocol in service_definition:
+                service_definition[ip_protocol].append(port)
+            else:
+                service_definition[ip_protocol] = [port]
 
-        return service_definition
+        return Service(service_code, service_name, service_definition)

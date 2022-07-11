@@ -20,54 +20,47 @@
 import io
 import subprocess
 import shutil
-from typing import Tuple, Optional, Union, List, Any
+from typing import Tuple, Optional, Union, List, Any, Dict
 import re
 import ipaddress
 from datetime import datetime
 from .base import FirewallBase
-from .rules import ServiceReader, Rule, UserRule
+from .rules import ServiceReader, Rule, UserRule, FirewallRule, Service
 import logging
 
 log = logging.getLogger(__name__)
 
 
-class IptablesRule(Rule):
+class IptablesRule(FirewallRule):
 
-    def __init__(self, rule_number_in_chain: int, proto: str, port: int, source_address, comment: str = None):
-        super().__init__(proto, port, source_address, comment=comment)
+    def __init__(self, rule_number_in_chain: int, proto: str, port: int, service: Service, source_address,
+                 comment: str = None):
+        super().__init__(proto, port, service, source_address, comment=comment)
         self.rule_number_in_chain = rule_number_in_chain
         self.expiry = None
-
-    def has_expired(self) -> bool:
-        raise RuntimeError("IptablesRule has no expiry!")
-
-    def __str__(self) -> str:
-        return "iptables IPv{} rule {}: {}/{} allowed from {}".format(
-            self.source_address_family,
-            self.rule_number_in_chain,
-            self.proto.upper(), self.port, self.source
-        )
 
 
 class MatchedIptablesRule(UserRule):
 
     def __init__(self, rule_number_in_chain: int, user_rule: UserRule):
-        super().__init__(user_rule.owner, user_rule.proto, user_rule.port, user_rule.source_address,
+        super().__init__(user_rule.owner, user_rule.service, user_rule.source_address,
                          expiry=user_rule.expiry, comment=user_rule.comment)
         self.rule_number_in_chain = rule_number_in_chain
 
     def __str__(self) -> str:
-        return "User {} iptables IPv{} rule {}: {}/{} allowed from {}".format(
+        return "User {} iptables IPv{} rule {}: {} allowed from {}".format(
             self.owner,
             self.source_address_family,
             self.rule_number_in_chain,
-            self.proto.upper(), self.port, self.source
+            self.service, self.source
         )
 
 
 class Iptables(FirewallBase):
 
-    def __init__(self, chain_name: str):
+    def __init__(self, services: Dict[str, Service], chain_name: str):
+        super().__init__(services)
+
         if not chain_name:
             raise ValueError("Need valid IPtables chain name!")
         self._chain = chain_name
@@ -108,15 +101,18 @@ class Iptables(FirewallBase):
 
     def query_readable(self, rules: List[UserRule]) -> List[str]:
         """
-        Query for currently active firewall rules
+        Query for currently active firewall rules.
+        Match the rules against all users' rules.
+        :param rules: Users' rules
+        :param services: All servies
         :return: list of strings
         """
 
         rules_out = []
 
         for rule in rules:
-            rule_out = self._rule_to_ipchain_append(4, rule, with_command=True)
-            if rule_out:
+            service_rules = self._rule_to_ipchain_append(4, rule, with_command=True)
+            for rule_out in service_rules:
                 rule_str = ""
                 if rule.has_expired():
                     # Ah. Expired already.
@@ -126,8 +122,8 @@ class Iptables(FirewallBase):
                 rules_out.append(rule_str)
 
         for rule in rules:
-            rule_out = self._rule_to_ipchain_append(6, rule, with_command=True)
-            if rule_out:
+            service_rules = self._rule_to_ipchain_append(6, rule, with_command=True)
+            for rule_out in service_rules:
                 rule_str = ""
                 if rule.has_expired():
                     # Ah. Expired already.
@@ -190,8 +186,8 @@ class Iptables(FirewallBase):
 
         # Rules will be appended to the end of the chain
         for rule in ipv4_rules_to_add:
-            rule_out = self._rule_to_ipchain_append(4, rule, with_command=True)
-            if rule_out:
+            service_rules = self._rule_to_ipchain_append(4, rule, with_command=True)
+            for rule_out in service_rules:
                 p, output, err = _exec_helper(rule_out)
                 if p.returncode != 0:
                     raise RuntimeError("Failed to add IPtables IPv4 rule: '{}'".format(str(rule)))
@@ -207,8 +203,8 @@ class Iptables(FirewallBase):
 
         # Exactly same processing as for IPv4-rules
         for rule in ipv6_rules_to_add:
-            rule_out = self._rule_to_ipchain_append(6, rule, with_command=True)
-            if rule_out:
+            service_rules = self._rule_to_ipchain_append(6, rule, with_command=True)
+            for rule_out in service_rules:
                 p, output, err = _exec_helper(rule_out)
                 if p.returncode != 0:
                     raise RuntimeError("Failed to add IPtables IPv6 rule: '{}'".format(str(rule)))
@@ -236,8 +232,8 @@ class Iptables(FirewallBase):
                 rule_str = ' '.join(str(r) for r in rule_out)
                 rules_out.append(rule_str)
         for rule in ipv4_rules_to_add:
-            rule_out = self._rule_to_ipchain_append(4, rule, with_command=True)
-            if rule_out:
+            service_rules = self._rule_to_ipchain_append(4, rule, with_command=True)
+            for rule_out in service_rules:
                 rule_str = ' '.join(str(r) for r in rule_out)
                 rules_out.append(rule_str)
 
@@ -248,8 +244,8 @@ class Iptables(FirewallBase):
                 rule_str = ' '.join(str(r) for r in rule_out)
                 rules_out.append(rule_str)
         for rule in ipv6_rules_to_add:
-            rule_out = self._rule_to_ipchain_append(6, rule, with_command=True)
-            if rule_out:
+            service_rules = self._rule_to_ipchain_append(6, rule, with_command=True)
+            for rule_out in service_rules:
                 rule_str = ' '.join(str(r) for r in rule_out)
                 rules_out.append(rule_str)
 
@@ -329,14 +325,17 @@ class Iptables(FirewallBase):
             # Search for this active rule in set of user-rules
             found_it = False
             for idx, rule in enumerate(user_rules):
-                # Match: 1) Proto 2) Port 3) Source address 4) Comment
+                # Match: 1) Service 2) Source address 3) Comment
                 if rule == active_rule:
                     # Found match!
-                    matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
-                    ipv4_rules_matched.append(matched_rule)
-                    # XXX Debug noise:
-                    # log.debug("Matched IPv4 rule: '{}'!".format(matched_rule))
-                    matched_rules[idx] = True
+                    if not matched_rules[idx]:
+                        # A service can contain multiple protocols and ports.
+                        # Append to list only if user rule not matched already.
+                        matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
+                        ipv4_rules_matched.append(matched_rule)
+                        # XXX Debug noise:
+                        # log.debug("Matched IPv4 rule: '{}'!".format(matched_rule))
+                        matched_rules[idx] = True
                     found_it = True
                     break
 
@@ -353,14 +352,17 @@ class Iptables(FirewallBase):
             # Search for this active rule in set of user-rules
             found_it = False
             for idx, rule in enumerate(user_rules):
-                # Match: 1) Proto 2) Port 3) Source address 4) Comment
+                # Match: 1) Service 2) Source address 3) Comment
                 if rule == active_rule:
                     # Found match!
-                    matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
-                    ipv6_rules_matched.append(matched_rule)
-                    # XXX Debug noise:
-                    # log.debug("Matched IPv6 rule: '{}'!".format(matched_rule))
-                    matched_rules[idx] = True
+                    if not matched_rules[idx]:
+                        # A service can contain multiple protocols and ports.
+                        # Append to list only if user rule not matched already.
+                        matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
+                        ipv6_rules_matched.append(matched_rule)
+                        # XXX Debug noise:
+                        # log.debug("Matched IPv6 rule: '{}'!".format(matched_rule))
+                        matched_rules[idx] = True
                     found_it = True
                     break
 
@@ -382,6 +384,11 @@ class Iptables(FirewallBase):
         # Stats matched rules
         matches_found = len([True for match in matched_rules.values() if match is True])
 
+        # Any changes in rules?
+        changes = matches_found != len(matched_rules)
+        if not changes:
+            changes = len(ipv4_rules_to_remove) + len(ipv6_rules_to_remove) > 0
+
         # Logging
         log.debug("Out of {} rules, {} match, {} need to be added. {} active rules to remove.".format(
             len(matched_rules), matches_found,
@@ -391,7 +398,7 @@ class Iptables(FirewallBase):
 
         return ipv4_rules_matched, ipv4_rules_to_remove, ipv4_rules_to_add, \
                ipv6_rules_matched, ipv6_rules_to_remove, ipv6_rules_to_add, \
-               matches_found != len(matched_rules)
+               changes
 
     def _read_chain(self, ip_version: int) -> List[IptablesRule]:
         if ip_version == 4:
@@ -519,40 +526,50 @@ num  target     prot opt source               destination
 
             # XXX Debug noise:
             # log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
-            rule_out = IptablesRule(rule_num, proto, port, source_addr, comment)
-            rules_out.append(rule_out)
+            service = IptablesRule.find_service(proto, port, self.services)
+            if service:
+                rule_out = IptablesRule(rule_num, proto, port, service, source_addr, comment)
+                rules_out.append(rule_out)
 
         return rules_out
 
-    def _rule_to_ipchain_append(self, proto_ver: int, rule: Rule, with_command=False) -> Union[list, None]:
+    def _rule_to_ipchain_append(self, proto_ver: int, rule: Rule, with_command=False) -> List[list]:
+        ipchain_rules = []
+
         # Sanity: IPv4 or IPv6 address
         if rule.source_address_family != proto_ver:
-            return None
+            return ipchain_rules
 
         # Output
-        ipchain_rule = [
-            "-A", self._chain, "-p", rule.proto, "-m", rule.proto, "--source", rule.source, "--dport", rule.port
-        ]
-        if rule.comment:
-            ipchain_rule.extend(["-m", "comment", "--comment", rule.comment])
-        ipchain_rule.extend(["-j", "ACCEPT"])
+        for service_def in rule.service.enumerate():
+            proto = service_def[0]
+            port = service_def[1]
 
-        if with_command:
-            if rule.source_address_family == 4:
-                command_to_run = self._iptables_cmd
-            elif rule.source_address_family == 6:
-                command_to_run = self._ip6tables_cmd
-            else:
-                raise ValueError("IP-version needs to be 4 or 6! Has: '{}'".format(rule.source_address_family))
+            ipchain_rule = [
+                "-A", self._chain, "-p", proto, "-m", proto, "--source", rule.source, "--dport", port
+            ]
+            if rule.comment:
+                ipchain_rule.extend(["-m", "comment", "--comment", rule.comment])
+            ipchain_rule.extend(["-j", "ACCEPT"])
 
-            ipchain_rule.insert(0, command_to_run)
+            if with_command:
+                if rule.source_address_family == 4:
+                    command_to_run = self._iptables_cmd
+                elif rule.source_address_family == 6:
+                    command_to_run = self._ip6tables_cmd
+                else:
+                    raise ValueError("IP-version needs to be 4 or 6! Has: '{}'".format(rule.source_address_family))
 
-        return ipchain_rule
+                ipchain_rule.insert(0, command_to_run)
 
-    def _rule_to_ipchain_delete(self, proto_ver: int, rule: IptablesRule, with_command=False) -> Union[list, None]:
+            ipchain_rules.append(ipchain_rule)
+
+        return ipchain_rules
+
+    def _rule_to_ipchain_delete(self, proto_ver: int, rule: IptablesRule, with_command=False) -> List[list]:
         # Sanity: IPv4 or IPv6 address
         if rule.source_address_family != proto_ver:
-            return None
+            return []
 
         # Output
         ipchain_rule = [

@@ -24,7 +24,7 @@ from lxml import etree
 from pwd import getpwnam
 from datetime import datetime
 from .service_reader import ServiceReader
-from .user_rule import UserRule
+from .user_rule import UserRule, Service
 import logging
 
 log = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ class RuleReader:
             raise ValueError("Rule path '{}' is a file, not directory!".format(user_rule_path))
 
         self._path = rule_path
+        self.all_services = None
 
     def _rule_filename(self, user: str) -> str:
         filename = "{}/{}/{}.xml".format(self._path, self.USERS_PATH, user)
@@ -53,8 +54,9 @@ class RuleReader:
         return os.path.exists(filename)
 
     def read_all_users(self) -> List[UserRule]:
-        reader = ServiceReader(self._path)
-        services = reader.read_all()
+        if not self.all_services:
+            reader = ServiceReader(self._path)
+            self.all_services = reader.read_all()
 
         all_rules = []
         user_rules_path = "{}/{}".format(self._path, self.USERS_PATH)
@@ -71,7 +73,7 @@ class RuleReader:
                                 "Ignoring.".format(user_from_filename))
                     continue
                 user = unix_user_passwd_record.pw_name
-                rules = self._user_rule_reader(user, xml_file, services)
+                rules = self._user_rule_reader(user, xml_file, self.all_services)
                 all_rules.extend(rules)
 
         return all_rules
@@ -89,7 +91,7 @@ class RuleReader:
         return rules
 
     @staticmethod
-    def _user_rule_reader(user: str, user_rules_filename: str, services: dict) -> List[UserRule]:
+    def _user_rule_reader(user: str, user_rules_filename: str, services: List[Service]) -> List[UserRule]:
         log.debug("For user {}, reading rule file: {}".format(user, user_rules_filename))
         root = etree.parse(user_rules_filename)
         schema_filename = "{}/xml-schemas/user_rule.xsd".format(sys.prefix)
@@ -134,8 +136,7 @@ class RuleReader:
                     else:
                         comment = None
 
-                    for service_def in service:
-                        rule = UserRule(user, service_def[0], service_def[1], source, expiry, comment)
-                        rules.append(rule)
+                    rule = UserRule(user, service, source, expiry, comment)
+                    rules.append(rule)
 
         return rules
