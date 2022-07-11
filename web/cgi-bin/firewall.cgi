@@ -136,7 +136,7 @@ Hello <%= $name %>
 </div>
 <br/>
 <div id="buttons">
-    <button id="reload_rules">Discard changes & reload</button>
+    <button id="reload_rules">Reload rules from server discarding any possible changes</button>
 </div>
 <script src="../jquery-3.6.0.min.js"></script>
 <script>
@@ -147,17 +147,7 @@ $(document).ready(() => {
     console.log( `ready! <%= $base_url %>` );
 
     // Get rules:
-    // Docs: https://api.jquery.com/jquery.ajax/
-    $.ajax({
-        url: `${window.location.href}/api/rules`,
-        method: 'get',
-        context: document.body
-    }).done((data) => {
-        console.log("ok, got rules");
-        bastinon_rules = data['rules'];
-
-        update_rules();
-    });
+    load_rules(true);
 
     // Get all available firewall services:
     $.ajax({
@@ -170,7 +160,28 @@ $(document).ready(() => {
 
         update_rules();
     });
+
+    // Refresh-button:
+    $("#reload_rules").click(() => {
+        load_rules(true);
+    });
 });
+
+load_rules = (update_ui) => {
+    // Docs: https://api.jquery.com/jquery.ajax/
+    $.ajax({
+        url: `${window.location.href}/api/rules`,
+        method: 'get',
+        context: document.body
+    }).done((data) => {
+        console.log("ok, got rules");
+        bastinon_rules = data['rules'];
+
+        if (update_ui) {
+            update_rules();
+        }
+    });
+}
 
 update_rules = () => {
     if (!bastinon_rules || !bastinon_services) {
