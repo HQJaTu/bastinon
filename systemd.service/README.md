@@ -40,8 +40,8 @@ Policy install (as _root_):
    NAME                   TYPE      SIGNATURE RESULT/VALUE FLAGS
    .DeleteRule            method    ss        -            -
    .GetProtocols          method    -         as           -
-   .GetRules              method    s         a(sssisvvb)  -
-   .GetServices           method    -         as           -
+   .GetRules              method    s         a(ssssvvb)   -
+   .GetServices           method    -         a(ss)        -
    .Ping                  method    -         s            -
    .UpsertRule            method    sssisvv   s            -
     ```

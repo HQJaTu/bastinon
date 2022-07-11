@@ -144,14 +144,14 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature=None, out_signature="as",
+                    in_signature=None, out_signature="a(ss)",
                     sender_keyword='sender')
-    def GetServices(self, sender=None) -> list:
+    def GetServices(self, sender=None) -> List[Tuple[str, str]]:
         reader = ServiceReader(self._firewall_rules_path)
         services = reader.read_all()
 
         # Test the newly read rules
-        services_out = [str(out) for out in services]
+        services_out = [(service.code, service.name) for service_code, service in services.items()]
 
         log.info("GetServices(): Returning list of {} firewall services".format(len(services_out)))
 
@@ -171,10 +171,10 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="a(sssisvvb)",
+                    in_signature="s", out_signature="a(ssssvvb)",
                     sender_keyword='sender')
     def GetRules(self, user: str, sender=None) -> List[
-        Tuple[str, str, str, int, str, Union[str, None], Union[str, None], bool]
+        Tuple[str, str, str, str, Union[str, None], Union[str, None], bool]
     ]:
         """
         Method docs:
@@ -214,7 +214,7 @@ class FirewallUpdaterService(service.Object):
             else:
                 expiry = False
 
-            return rule_hash, r[0].owner, r[0].proto, r[0].port, source, comment, expiry, r[1]
+            return rule_hash, r[0].owner, r[0].service.code, source, comment, expiry, r[1]
 
         # Rules
         rules_out = []
@@ -291,7 +291,7 @@ class FirewallUpdaterService(service.Object):
         """
 
         # 64-bit unsigned integer as hex, hash() returns signed. Skip 0x at the beginning.
-        r_tuple = (r.owner, r.proto, r.port, r.source, r.comment, r.expiry)
+        r_tuple = (r.owner, r.service.code, r.source, r.comment, r.expiry)
         rule_hash = hex(hash(r_tuple) & 0xffffffffffffffff)[2:]
 
         return rule_hash

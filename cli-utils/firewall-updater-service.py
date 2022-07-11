@@ -29,6 +29,7 @@ from gi.repository import GObject  # PyGObject
 from typing import Optional, Tuple
 from periodic import Periodic  # asyncio-periodic
 import signal
+from firewall_updater.rules import ServiceReader
 from firewall_updater import FirewallBase, Iptables, dbus
 import argparse
 import logging
@@ -177,7 +178,8 @@ def main() -> None:
     else:
         raise ValueError("Internal: Which bus?")
 
-    iptables_firewall = Iptables("Friends-Firewall-INPUT")
+    reader = ServiceReader(args.rule_path)
+    iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT")
 
     log.info('Starting up ...')
     daemon(
