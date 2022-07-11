@@ -111,9 +111,6 @@ input[type=number] {
     appearance: textfield;
     margin: 0;
 }
-.port_input {
-    width: 55px;
-}
 .source_input {
     width: 200px;
 }
@@ -139,12 +136,11 @@ Hello <%= $name %>
 </div>
 <br/>
 <div id="buttons">
-    <button id="update_btn">Update</button>
+    <button id="reload_rules">Discard changes & reload</button>
 </div>
 <script src="../jquery-3.6.0.min.js"></script>
 <script>
 let bastinon_services = null;
-let bastinon_protocols = null;
 let bastinon_rules = null;
 
 $(document).ready(() => {
@@ -174,22 +170,10 @@ $(document).ready(() => {
 
         update_rules();
     });
-
-    // Get all available firewall protocols:
-    $.ajax({
-        url: `${window.location.href}/api/protocols`,
-        method: 'get',
-        context: document.body
-    }).done((data) => {
-        console.log("ok, got protocols");
-        bastinon_protocols = data['protocols'];
-
-        update_rules();
-    });
 });
 
 update_rules = () => {
-    if (!bastinon_rules || !bastinon_services || !bastinon_protocols) {
+    if (!bastinon_rules || !bastinon_services) {
         console.log(`Fail! Missing data at this point.`);
         return;
     }
@@ -200,49 +184,51 @@ update_rules = () => {
     let html = '';
     for (const rule of bastinon_rules) {
         const rule_id = rule[0];
-        const rule_effective = rule[7] ? "Active" : "inactive";
-        let protocol_opts = '';
-        for (const protocol of bastinon_protocols) {
-            if (protocol === rule[2]) {
-                protocol_opts += `<option value="${protocol}" selected>${protocol.toUpperCase()}</option>`;
+        const rule_effective = rule[6] ? "Active" : "inactive";
+        let service_opts = '';
+        for (const service of bastinon_services) {
+            if (service[0] === rule[2]) {
+                service_opts += `<option value="${service[0]}" selected>${service[1]}</option>`;
             } else {
-                protocol_opts += `<option value="${protocol}">${protocol.toUpperCase()}</option>`;
+                service_opts += `<option value="${service[0]}">${service[1]}</option>`;;
             }
         }
 
         // Go for HTML:
         html += `<tr>
-  <td><select id="protocol_${rule_id}" class="protocol_input">${protocol_opts}</select></td>
-  <td><input type="number" id="port_${rule_id}" required value="${rule[3]}" max="1" min="65535" class="port_input"></td>
-  <td><input type="text" id="source_${rule_id}" required value="${rule[4]}" class="source_input"></td>
-  <td><input type="text" id="comment_${rule_id}" value="${rule[5]}" class="comment_input"></td>
-  <td><input type="datetime-local" id="expiry_${rule_id}" value="${rule[6]}" class="expiry_input"></td>
+  <td><select id="service_${rule_id}" class="service_input">${service_opts}</select></td>
+  <td><input type="text" id="source_${rule_id}" required value="${rule[3]}" class="source_input"></td>
+  <td><input type="text" id="comment_${rule_id}" value="${rule[4]}" class="comment_input"></td>
+  <td><input type="datetime-local" id="expiry_${rule_id}" value="${rule[5]}" class="expiry_input"></td>
   <td class="effective_column">${rule_effective}</td>
-  <td class="center_align" class="action_input"><button id="delete_rule_btn_${rule_id}">Delete</button></td>
+  <td class="center_align" class="action_input">
+    <button id="update_rule_btn_${rule_id}">Update</button>
+    <button id="delete_rule_btn_${rule_id}">Delete</button>
+  </td>
 </tr>`;
     }
 
     // Add new row to bottom
     const rule_id = "new";
-    let protocol_opts = '<option value="">-Select-</option>';
-    for (const protocol of bastinon_protocols) {
-        protocol_opts += `<option value="${protocol}">${protocol.toUpperCase()}</option>`;
+    let service_opts = '<option value="">-Select-</option>';
+    for (const service of bastinon_services) {
+        service_opts += `<option value="${service[0]}">${service[1]}</option>`;
     }
     html += `<tr>
-  <td><select id="protocol_${rule_id}" class="protocol_input">${protocol_opts}</select></td>
-  <td><input type="number" id="port_${rule_id}" required max="1" min="65535" class="port_input"></td>
+  <td><select id="protocol_${rule_id}" class="service_input">${service_opts}</select></td>
   <td><input type="text" id="source_${rule_id}" required class="source_input"></td>
   <td><input type="text" id="comment_${rule_id}" class="comment_input"></td>
   <td><input type="datetime-local" id="expiry_${rule_id}" class="expiry_input"></td>
   <td class="effective_column">new</td>
-  <td class="center_align" class="action_input"><button id="add_rule_btn">Add</button></td>
+  <td class="center_align" class="action_input">
+    <button id="add_rule_btn">Add</button>
+  </td>
 </tr>`;
 
     // Re-do the <div/>-contents with a freshly created table
     table_div.html(`<table id="rules_table">
 <tr>
-    <th>Protocol</th>
-    <th>Port</th>
+    <th>Service</th>
     <th>Source address</th>
     <th>Comment</th>
     <th>Expiry</th>
