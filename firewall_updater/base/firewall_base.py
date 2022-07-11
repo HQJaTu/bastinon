@@ -19,6 +19,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Tuple, List, Union
+from datetime import datetime
 from ..rules import UserRule
 import logging
 
@@ -28,10 +29,10 @@ log = logging.getLogger(__name__)
 class FirewallBase(ABC):
 
     @abstractmethod
-    def query(self, rules: List[UserRule]) -> List[Tuple[str, str, int, str, Union[str, None], bool]]:
+    def query(self, rules: List[UserRule]) -> List[Tuple[UserRule, bool]]:
         """
         Query for currently active firewall rules
-        :return: list of tuples, tuple: user, proto, port, source address, comment, rule in effect
+        :return: list of tuples, tuple: user rule object, rule in effect
         """
         pass
 

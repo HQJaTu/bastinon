@@ -23,7 +23,7 @@ from dbus import (SessionBus, SystemBus, service, mainloop)
 from pwd import getpwuid, getpwnam
 from datetime import datetime
 from ..base.firewall_base import FirewallBase
-from ..rules import RuleReader, ServiceReader
+from ..rules import RuleReader, ServiceReader, UserRule
 import logging
 
 log = logging.getLogger(__name__)
@@ -171,9 +171,11 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="s", out_signature="a(sssisvb)",
+                    in_signature="s", out_signature="a(sssisvvb)",
                     sender_keyword='sender')
-    def GetRules(self, user: str, sender=None) -> List[Tuple[str, str, str, int, str, Union[str, None], bool]]:
+    def GetRules(self, user: str, sender=None) -> List[
+        Tuple[str, str, str, int, str, Union[str, None], Union[str, None], bool]
+    ]:
         """
         Method docs:
         https://dbus.freedesktop.org/doc/dbus-python/dbus.service.html?highlight=method#dbus.service.method
@@ -193,19 +195,44 @@ class FirewallUpdaterService(service.Object):
         rules = reader.read_all_users()
         active_rules = self._firewall.query(rules)
 
+        def _rule_tuple_helper(r: Tuple[UserRule, bool]) -> tuple:
+            # Notes:
+            # - Source address will be converted into a string
+            # - Comment is either str or bool, D-Bus cannot return None
+            # - Expiry is either str or bool, D-Bus cannot return None
+
+            # 64-bit unsigned integer as hex, hash() returns signed
+            r_tuple = (r[0].owner, r[0].proto, r[0].port, r[0].source, r[0].comment, r[0].expiry)
+            rule_hash = hex(hash(r_tuple) & 0xffffffffffffffff)[2:]
+
+            source = str(r[0].source)
+            if r[0].comment:
+                comment = r[0].comment
+            else:
+                comment = False
+            if r[0].expiry:
+                # ISO 8601: https://tc39.es/ecma262/#sec-date-time-string-format
+                # YYYY-MM-DDTHH:mm:ss.sssZ
+                expiry = r[0].expiry.isoformat()
+            else:
+                expiry = False
+            return rule_hash, r[0].owner, r[0].proto, r[0].port, source, comment, expiry, r[1]
+
         # Rules
         rules_out = []
         if user:
             # rules_out = [r for r in active_rules if r[0] == user]
+            #           user,prot,port,src, comment,          expiry,   active
+            # r = Tuple[str, str, int, str, Union[str, None], datetime, bool]
             for r in active_rules:
-                if r[0] != user:
+                if r[0].owner != user:
                     continue
-                rule = (str(hash(r)), ) + r
+                rule = _rule_tuple_helper(r)
                 rules_out.append(rule)
         else:
             # rules_out = active_rules
             for r in active_rules:
-                rule = (str(hash(r)), ) + r
+                rule = _rule_tuple_helper(r)
                 rules_out.append(rule)
 
         log.info(

@@ -63,12 +63,21 @@ def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None
             print(str(rule))
 
 
-def read_active_rules_from_firewall(rule_engine: FirewallBase) -> None:
-    rules = rule_engine.query()
+def read_active_rules_from_firewall(rule_engine: FirewallBase, rules_path: str) -> None:
+    reader = RuleReader(rules_path)
+    rules = reader.read_all_users()
+    user_rules = rule_engine.query(rules)
 
-    log.info("Active rules ({}):".format(len(rules)))
-    from pprint import pprint
-    pprint(rules)
+    log.info("Requested rules ({}):".format(len(user_rules)))
+    log.debug("Effective rules:")
+    for rule in user_rules:
+        if rule[1]:
+            log.debug(rule[0])
+    log.debug("Requested but non-effective rules:")
+    for rule in user_rules:
+        if not rule[1]:
+            log.debug(rule[0])
+    log.debug("Done listing rules")
 
 
 def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
@@ -76,9 +85,8 @@ def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
     rules = reader.read_all_users()
 
     # Test the newly read rules
-    log.info("Rules need updating:")
     if rule_engine.needs_update(rules):
-        log.info("Need updating")
+        log.info("Rules need updating!")
     else:
         log.info("All ok")
 
@@ -129,8 +137,8 @@ def main() -> None:
 
     iptables_firewall = Iptables("Friends-Firewall-INPUT")
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
-    # read_active_rules_from_firewall(iptables_firewall)
-    #rules_need_update(iptables_firewall, args.rule_path)
+    # read_active_rules_from_firewall(iptables_firewall, args.rule_path)
+    # rules_need_update(iptables_firewall, args.rule_path)
     rules_enforcement(iptables_firewall, args.rule_path, simulation=True, forced=args.force)
 
 

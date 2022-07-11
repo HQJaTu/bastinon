@@ -82,10 +82,10 @@ class Iptables(FirewallBase):
     # Abstract implementation for IPtables
     #
 
-    def query(self, rules: List[UserRule]) -> List[Tuple[str, str, int, str, Union[str, None], bool]]:
+    def query(self, rules: List[UserRule]) -> List[Tuple[UserRule, bool]]:
         """
         Query for currently active firewall rules
-        :return: list of tuples, tuple: user, proto, port, source address, comment, rule in effect
+        :return: list of tuples, tuple: user rule object, rule in effect
         """
 
         ipv4_rules_matched, _, ipv4_rules_to_add, \
@@ -95,24 +95,14 @@ class Iptables(FirewallBase):
 
         rules_out = []
         if ipv4_rules_matched:
-            # Notes:
-            # - Source address will be converted into a string
-            # - A comment is either str or bool, D-Bus cannot return None
-            rules_out = [(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, True)
-                         for r in ipv4_rules_matched]
+            rules_out.extend([(r, True) for r in ipv4_rules_matched])
         if ipv4_rules_to_add:
-            rules_out = [(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, False)
-                         for r in ipv4_rules_to_add]
+            rules_out.extend([(r, False) for r in ipv4_rules_to_add])
 
         if ipv6_rules_matched:
-            # Note: For transformation, see IPv4 above
-            rules_out.extend([(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, True)
-                              for r in ipv6_rules_matched])
+            rules_out.extend([(r, True) for r in ipv6_rules_matched])
         if ipv6_rules_to_add:
-            # Note: For transformation, see IPv4 above
-            rules_out.extend(
-                [(r.owner, r.proto, r.port, str(r.source_address), r.comment if r.comment else False, False)
-                 for r in ipv6_rules_to_add])
+            rules_out.extend([(r, False) for r in ipv6_rules_to_add])
 
         return rules_out
 
