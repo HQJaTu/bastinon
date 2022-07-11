@@ -16,3 +16,11 @@ class UserRule(Rule):
             self.service, self.source,
             self.expiry
         )
+
+    def __hash__(self) -> int:
+        return hash(self._hash_tuple())
+
+    def _hash_tuple(self) -> tuple:
+        return (
+            self.owner, self.service.code, self.source_address_family, self.source_address, self.expiry, self.comment
+        )

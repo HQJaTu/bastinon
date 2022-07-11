@@ -129,7 +129,7 @@ def add_rule(user: str, service_code: str, source: str, comment: str, rules_path
     service = reader.all_services[service_code]
 
     # Create the new rule to be appended
-    new_rule = UserRule(user, service, source, comment)
+    new_rule = UserRule(user, service, source, comment=comment)
 
     # Go write!
     rules.append(new_rule)

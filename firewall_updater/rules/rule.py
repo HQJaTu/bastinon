@@ -16,6 +16,13 @@ class Rule:
     def source(self) -> str:
         return str(self.source_address)
 
+    @source.setter
+    def source(self, source_address) -> None:
+        address_family, source = self._parse_address(source_address)
+
+        self.source_address_family = address_family
+        self.source_address = source
+
     def has_expired(self) -> bool:
         if not self.expiry:
             return False

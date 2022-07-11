@@ -22,8 +22,9 @@ from typing import Union, Tuple, List
 from dbus import (SessionBus, SystemBus, service, mainloop)
 from pwd import getpwuid, getpwnam
 from datetime import datetime
+from hashlib import sha256
 from ..base.firewall_base import FirewallBase
-from ..rules import RuleReader, ServiceReader, UserRule
+from ..rules import RuleReader, RuleWriter, ServiceReader, UserRule
 import logging
 
 log = logging.getLogger(__name__)
@@ -240,30 +241,80 @@ class FirewallUpdaterService(service.Object):
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
-                    in_signature="sssisvv", out_signature="s",
+                    in_signature="ssssvv", out_signature="s",
                     sender_keyword='sender')
     def UpsertRule(self,
                    existing_rule_hash: str,
                    user: str,
-                   proto: str,
-                   port: int,
+                   service_code: str,
                    source: str,
                    comment: str,
-                   expiry: str,
+                   expiry_str: str,
                    sender=None) -> str:
         """
         Update or insert a rule
         :param existing_rule_hash: hash for existing rule, empty string if inserting
         :param user: whose rules we're inserting
-        :param proto: protocol
-        :param port: port
+        :param service_code: service code
         :param source: source address
         :param comment: optional comment
-        :param expiry: optional rule expiry
+        :param expiry_str: optional rule expiry in ISO 8601
         :param sender: D-Bus sender connection
         :return: str, hash of inserted/updated rule
         """
-        pass
+
+        if existing_rule_hash:
+            log.debug("Requested updating for user '{}', service: '{}' with hash: {}".format(
+                user, service_code, existing_rule_hash
+            ))
+        else:
+            log.debug("Requested insert for user '{}', service: '{}'".format(user, service_code))
+
+        reader = RuleReader(self._firewall_rules_path)
+        rules = reader.read(str(user)) # Need to shake off dbus.String()
+
+        # Match user given service
+        if not service_code in reader.all_services:
+            raise ValueError("Unknown service '{}'!".format(service_code))
+        service = reader.all_services[service_code]
+
+        # Expiry:
+        if expiry_str:
+            expiry = datetime.strptime(expiry_str, "%Y-%m-%dT%H:%M:%S")
+        else:
+            expiry = None
+
+        if existing_rule_hash:
+            # Find the given rule
+            matching_hash_idx = None
+            for rule_idx, rule in enumerate(rules):
+                rule_hash = self._rule_hash(rule)
+                if existing_rule_hash == rule_hash:
+                    # Yeah! Found it.
+                    matching_hash_idx = rule_idx
+                    break
+            if matching_hash_idx is None:
+                raise ValueError("Failed to update! Rule hash '{}' not found.".format(existing_rule_hash))
+
+            # Update the rule
+            rules[matching_hash_idx].service = service
+            rules[matching_hash_idx].source = source
+            rules[matching_hash_idx].expiry = expiry
+            rules[matching_hash_idx].comment = comment
+            hash_to_return = self._rule_hash(rules[matching_hash_idx])
+            log.debug("Updated rule {}. New Hash: {}".format(existing_rule_hash, hash_to_return))
+        else:
+            # Create the new rule to be appended
+            new_rule = UserRule(user, service, source, expiry=expiry, comment=comment)
+            rules.append(new_rule)
+            hash_to_return = self._rule_hash(new_rule)
+            log.debug("Added rule: {}".format(hash_to_return))
+
+        # Go write!
+        writer = RuleWriter(self._firewall_rules_path)
+        writer.write(user, rules)
+
+        return hash_to_return
 
     # noinspection PyPep8Naming
     @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
@@ -290,8 +341,11 @@ class FirewallUpdaterService(service.Object):
         :return: string
         """
 
+        # NOTE:
+        # Python hash() uses random seed making it useless for this type of hashing.
         # 64-bit unsigned integer as hex, hash() returns signed. Skip 0x at the beginning.
-        r_tuple = (r.owner, r.service.code, r.source, r.comment, r.expiry)
-        rule_hash = hex(hash(r_tuple) & 0xffffffffffffffff)[2:]
+        # rule_hash = hex(hash(r) & 0xffffffffffffffff)[2:]
+
+        rule_hash = sha256(str(r._hash_tuple()).encode('utf-8')).hexdigest()
 
         return rule_hash
