@@ -363,6 +363,45 @@ class FirewallUpdaterService(service.Object):
 
         return
 
+    # noinspection PyPep8Naming
+    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
+                    in_signature=None, out_signature="b",
+                    sender_keyword='sender')
+    def FirewallUpdatesNeeded(self, sender=None) -> bool:
+        """
+        Query if all user-rules are effective
+        :param sender:
+        :return: True = updates needed, False = all ok, no updates needed
+        """
+        reader = RuleReader(self._firewall_rules_path)
+        rules = reader.read_all_users()
+
+        # Test the newly read rules
+        updates_needed = self._firewall.needs_update(rules)
+        if updates_needed:
+            log.info("Rules need updating!")
+        else:
+            log.info("All ok")
+
+        return updates_needed
+
+    # noinspection PyPep8Naming
+    @service.method(dbus_interface=FIREWALL_UPDATER_SERVICE_BUS_NAME,
+                    in_signature=None, out_signature=None,
+                    sender_keyword='sender')
+    def FirewallUpdate(self, sender=None) -> None:
+        """
+        Make all user-rules are effective
+        :param sender:
+        :return: True = updates needed, False = all ok, no updates needed
+        """
+        reader = RuleReader(self._firewall_rules_path)
+        rules = reader.read_all_users()
+
+        # Test the newly read rules
+        self._firewall.set(rules)
+        log.info("Firewall changes done!")
+
     @staticmethod
     def _rule_hash(r: UserRule) -> str:
         """

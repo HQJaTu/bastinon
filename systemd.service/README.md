@@ -39,11 +39,13 @@ Policy install (as _root_):
     ```text
    NAME                   TYPE      SIGNATURE RESULT/VALUE FLAGS
    .DeleteRule            method    ss        -            -
+   .FirewallUpdate        method    -         -            -
+   .FirewallUpdatesNeeded method    -         b            -
    .GetProtocols          method    -         as           -
    .GetRules              method    s         a(ssssvvb)   -
    .GetServices           method    -         a(ss)        -
    .Ping                  method    -         s            -
-   .UpsertRule            method    sssisvv   s            -
+   .UpsertRule            method    ssssvv    s            -
     ```
 5. Test service with a ping:
     ```bash
