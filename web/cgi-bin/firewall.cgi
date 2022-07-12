@@ -145,6 +145,33 @@ del '/api/rules/:id' => sub {
     $c->render(json => $json, status => OK);
 };
 
+get '/api/firewall/status' => sub {
+    my ($c) = @_;
+
+    my $manager = _get_dbus();
+    my $updates_needed = $manager->FirewallUpdatesNeeded();
+
+    # Return
+    # Note: Perl needs bit of JSON-trickery to return boolean values
+    my $json = {
+        "updates_needed" => $updates_needed ? \1 : \0
+    };
+    $c->render(json => $json, status => OK);
+};
+
+put '/api/firewall/update' => sub {
+    my ($c) = @_;
+
+    my $manager = _get_dbus();
+    $manager->FirewallUpdate();
+
+    # Return
+    my $json = {
+        "updated" => \1
+    };
+    $c->render(json => $json, status => OK);
+};
+
 app->start();
 
 __DATA__
@@ -204,12 +231,14 @@ Hello <%= $name %>
 </div>
 <br/>
 <div id="buttons">
-    <button id="reload_rules">Reload rules from server discarding any possible changes</button>
+    <button id="reload_rules_btn">Reload rules from server discarding any possible changes</button>
+    <button id="rules_into_effect_btn" disabled>Make rules effective</button>
 </div>
 <script src="../jquery-3.6.0.min.js"></script>
 <script>
 let bastinon_services = null;
 let bastinon_rules = null;
+let bastinon_needs_updating = false;
 
 $(document).ready(() => {
     console.log( `ready! <%= $base_url %>` );
@@ -230,8 +259,13 @@ $(document).ready(() => {
     });
 
     // Refresh-button:
-    $("#reload_rules").click(() => {
+    $("#reload_rules_btn").click(() => {
         load_rules(true);
+    });
+
+    // Update-button:
+    $("#rules_into_effect_btn").click(() => {
+        rules_into_effect();
     });
 });
 
@@ -249,6 +283,8 @@ load_rules = (update_ui) => {
             update_rules();
         }
     });
+
+    query_firewall_status();
 }
 
 update_rules = () => {
@@ -401,6 +437,7 @@ upsert_rule = (rule_id, service, source, comment, expiry) => {
         bastinon_rules = data['rules'];
 
         update_rules();
+        query_firewall_status();
     }).fail((data) => {
         alert(`Failed!`);
     });
@@ -418,6 +455,45 @@ delete_rule = (rule_id) => {
         bastinon_rules = data['rules'];
 
         update_rules();
+        query_firewall_status();
+    }).fail((data) => {
+        alert(`Failed!`);
+    });
+}
+
+query_firewall_status = () => {
+    $.ajax({
+        url: `${window.location.href}/api/firewall/status`,
+        method: 'get',
+        context: document.body
+    }).done((data) => {
+        console.log("query_firewall_status(): got firewall update status");
+        bastinon_needs_updating = data['updates_needed'];
+
+        const update_button = $("#rules_into_effect_btn");
+        const update_button_disabled = update_button.prop('disabled');
+        if (bastinon_needs_updating) {
+            if (update_button_disabled) {
+                update_button.removeAttr('disabled');
+            }
+        } else {
+            if (!update_button_disabled) {
+                update_button.attr('disabled', true);
+            }
+        }
+    });
+}
+
+rules_into_effect = () => {
+    $.ajax({
+        url: `${window.location.href}/api/firewall/update`,
+        method: 'put',
+        context: document.body
+    }).done((data) => {
+        console.log(`rules_into_effect(): firewall rules are in effect`);
+
+        load_rules(true);
+        query_firewall_status();
     }).fail((data) => {
         alert(`Failed!`);
     });
