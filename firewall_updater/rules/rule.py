@@ -5,12 +5,21 @@ from .service import Service
 
 
 class Rule:
+    DEFAULT_MAX_IPV4_NETWORK_SIZE = 16
+    DEFAULT_MAX_IPV6_NETWORK_SIZE = 48
 
     def __init__(self, service: Service, source_address, expiry: datetime = None, comment: str = None):
         self.service = service
-        self.source_address_family, self.source_address = self._parse_address(source_address)
+        self.source_address_family = None
+        self.source_address = None
+        self.source_is_network = None
         self.expiry = expiry
         self.comment = comment
+
+        self._max_ipv4_network_size = self.DEFAULT_MAX_IPV4_NETWORK_SIZE
+        self._max_ipv6_network_size = self.DEFAULT_MAX_IPV6_NETWORK_SIZE
+
+        self.source = source_address
 
     @property
     def source(self) -> str:
@@ -18,10 +27,19 @@ class Rule:
 
     @source.setter
     def source(self, source_address) -> None:
-        address_family, source = self._parse_address(source_address)
+        address_family, source, is_network = self._parse_address(source_address)
 
         self.source_address_family = address_family
         self.source_address = source
+        self.source_is_network = is_network
+
+    @property
+    def max_ipv4_network_size(self) -> int:
+        return self._max_ipv4_network_size
+
+    @property
+    def max_ipv6_network_size(self) -> int:
+        return self._max_ipv6_network_size
 
     def has_expired(self) -> bool:
         if not self.expiry:
@@ -37,7 +55,7 @@ class Rule:
         if self.service.name != service.name:
             return False
 
-        address_family, source = self._parse_address(source_address)
+        address_family, source, _ = self._parse_address(source_address)
         if self.source_address_family != address_family:
             return False
 
@@ -51,10 +69,44 @@ class Rule:
 
         return True
 
+    def network_size_valid(self, raise_on_invalid: bool) -> Union[bool, None]:
+        if not self.source_is_network:
+            # Not applicable
+            return None
+
+        if self.source_address_family == 4:
+            if self.source_address.prefixlen < self.max_ipv4_network_size:
+                if raise_on_invalid:
+                    raise ValueError("IPv4 network too big! Requested /{}, allowed /{}".format(
+                        self.source_address.prefixlen, self.max_ipv4_network_size
+                    ))
+                else:
+                    return False
+            else:
+                return True
+        elif self.source_address_family == 6:
+            if self.source_address.prefixlen < self.max_ipv6_network_size:
+                if raise_on_invalid:
+                    raise ValueError("IPv6 network too big! Requested /{}, allowed /{}".format(
+                        self.source_address.prefixlen, self.max_ipv6_network_size
+                    ))
+                else:
+                    return False
+            else:
+                return True
+        else:
+            raise RuntimeError("Internal: Unknown IP-address family.")
+
+
     @staticmethod
     def _parse_address(address_in) -> Tuple[int, Union[
         ipaddress.IPv4Address, ipaddress.IPv4Network, ipaddress.IPv6Address, ipaddress.IPv6Network
-    ]]:
+    ], bool]:
+        """
+        Parse input address.
+        :param address_in: Address to parse: If string, parse it into object. If object, sanity check only.
+        :return: IP-address family (4 or 6), parsed object, True = is network False = single address
+        """
         if isinstance(address_in, str):
             # Only parse strings
             try:
@@ -68,10 +120,14 @@ class Rule:
             # Assume ready-parsed object
             source_parsed = address_in
 
-        if isinstance(source_parsed, ipaddress.IPv4Address) or isinstance(source_parsed, ipaddress.IPv4Network):
-            return 4, source_parsed
-        if isinstance(source_parsed, ipaddress.IPv6Address) or isinstance(source_parsed, ipaddress.IPv6Network):
-            return 6, source_parsed
+        if isinstance(source_parsed, ipaddress.IPv4Address):
+            return 4, source_parsed, False
+        if isinstance(source_parsed, ipaddress.IPv4Network):
+            return 4, source_parsed, True
+        if isinstance(source_parsed, ipaddress.IPv6Address):
+            return 6, source_parsed, False
+        if isinstance(source_parsed, ipaddress.IPv6Network):
+            return 6, source_parsed, True
 
         raise ValueError("Failed to parse IP-address: '{}'".format(address_in))
 
