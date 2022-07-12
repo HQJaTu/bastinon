@@ -84,7 +84,18 @@ get '/api/rules' => sub {
     $c->render(json => $json, status => OK);
 };
 
+post '/api/rules/' => sub {
+    my ($c) = @_;
+
+    return _post_or_put(@_);
+};
 put '/api/rules/:id' => sub {
+    my ($c) = @_;
+
+    return _post_or_put(@_);
+};
+
+sub _post_or_put {
     # Docs: https://restfulapi.net/rest-put-vs-post/
     my ($c) = @_;
 
@@ -161,6 +172,12 @@ input[type=number] {
     -moz-appearance: textfield;
     appearance: textfield;
     margin: 0;
+}
+input:required, select:required {
+    background-color: #eeeeee;
+}
+input:invalid, select:invalid {
+    background-color: #fd8b8b;
 }
 .source_input {
     width: 200px;
@@ -242,7 +259,7 @@ update_rules = () => {
     }
 
     const table_div = $('#rules_table_holder');
-    let update_button_ids = [];
+    let update_button_ids = ["new"];
 
     // Iterate all rules
     let html = '';
@@ -260,14 +277,18 @@ update_rules = () => {
 
         // Go for HTML:
         html += `<tr>
-  <td><select id="service_${rule_id}" class="service_input">${service_opts}</select></td>
-  <td><input type="text" id="source_${rule_id}" required value="${rule[3]}" class="source_input"></td>
-  <td><input type="text" id="comment_${rule_id}" value="${rule[4]}" class="comment_input"></td>
-  <td><input type="datetime-local" id="expiry_${rule_id}" value="${rule[5]}" class="expiry_input"></td>
+  <td>
+    <form id="rules_form_${rule_id}">
+      <select id="service_${rule_id}" required class="service_input">${service_opts}</select>
+    </form>
+  </td>
+  <td><input type="text" form="rules_form_${rule_id}" id="source_${rule_id}" required value="${rule[3]}" class="source_input"></td>
+  <td><input type="text" form="rules_form_${rule_id}" id="comment_${rule_id}" value="${rule[4]}" class="comment_input"></td>
+  <td><input type="datetime-local" form="rules_form_${rule_id}" id="expiry_${rule_id}" value="${rule[5]}" class="expiry_input"></td>
   <td class="effective_column">${rule_effective}</td>
   <td class="center_align" class="action_input">
-    <button id="update_rule_btn_${rule_id}">Update</button>
-    <button id="delete_rule_btn_${rule_id}">Delete</button>
+    <button id="update_rule_btn_${rule_id}" form="rules_form_${rule_id}">Update</button>
+    <button id="delete_rule_btn_${rule_id}" form="rules_form_${rule_id}">Delete</button>
   </td>
 </tr>`;
 
@@ -282,13 +303,18 @@ update_rules = () => {
         service_opts += `<option value="${service[0]}">${service[1]}</option>`;
     }
     html += `<tr>
-  <td><select id="service_${rule_id}" class="service_input">${service_opts}</select></td>
-  <td><input type="text" id="source_${rule_id}" required class="source_input"></td>
-  <td><input type="text" id="comment_${rule_id}" class="comment_input"></td>
-  <td><input type="datetime-local" id="expiry_${rule_id}" class="expiry_input"></td>
+  <td>
+    <form id="rules_form_${rule_id}">
+      <select id="service_${rule_id}" required class="service_input">${service_opts}</select>
+    </form>
+  </td>
+  <td><input type="text" form="rules_form_${rule_id}" id="source_${rule_id}" required class="source_input"></td>
+  <td><input type="text" form="rules_form_${rule_id}" id="comment_${rule_id}" class="comment_input"></td>
+  <td><input type="datetime-local" form="rules_form_${rule_id}" id="expiry_${rule_id}" class="expiry_input"></td>
   <td class="effective_column">new</td>
   <td class="center_align" class="action_input">
-    <button id="add_rule_btn">Add</button>
+    <button id="update_rule_btn_${rule_id}" form="rules_form_${rule_id}">Add</button>
+    <button id="fake_new_button_to_prevent_submit_event" style="display: none;" />
   </td>
 </tr>`;
 
@@ -305,11 +331,13 @@ update_rules = () => {
 ${html}
 </table>`);
 
-    // Buttons:
+    // Event handers for buttons and forms:
     for (const rule_id of update_button_ids) {
         const update_button_id = `update_rule_btn_${rule_id}`;
         const delete_button_id = `delete_rule_btn_${rule_id}`;
-        $(`#${update_button_id}`).click(() => {
+        const form_id = `rules_form_${rule_id}`;
+
+        $(`#${update_button_id}`).click((evt) => {
             // XXX Debug:
             //console.log(`Update button "${rule_id}" clicked!`);
             const service = $(`#service_${rule_id}`).val();
@@ -317,27 +345,47 @@ ${html}
             const comment = $(`#comment_${rule_id}`).val();
             let expiry = $(`#expiry_${rule_id}`).val();
             if (expiry && !expiry.match(/T\d{2}:\d{2}:\d{2}$/)) {
+                // ISO 8601 needs seconds
                 expiry += ':00';
             }
-            upsert_rule(rule_id, service, source, comment, expiry)
+
+            if (!upsert_rule(rule_id, service, source, comment, expiry)) {
+                // Note: Skip alerting, let jQuery handle required-fields.
+                //alert(`Failed! Mandatory fields filled?`);
+            }
+            //evt.preventDefault();
         });
-        $(`#${delete_button_id}`).click(() => {
+        $(`#${delete_button_id}`).click((evt) => {
             // XXX Debug:
             //console.log(`Delete button "${rule_id}" clicked!`);
             const service = $(`#service_${rule_id}`).val();
             const source = $(`#source_${rule_id}`).val();
             const confirm_message = `Really want to delete ${service} rule allowing ${source}?`;
             if (confirm(confirm_message)) {
-                delete_rule(rule_id)
+                delete_rule(rule_id);
             }
+            //evt.preventDefault();
+        });
+
+        // Form submit:
+        $(`#${form_id}`).submit((evt) => {
+            evt.preventDefault();
+            console.log(`Internal error: Prevented form ${form_id} submit!`);
         });
     }
 }
 
 upsert_rule = (rule_id, service, source, comment, expiry) => {
+    // XXX ToDo:
+    //const form_valid = $(`#rules_form_${rule_id}`).validate();
+    if (!service || !source) {
+        return false;
+    }
+
+    const rule_id_to_use = rule_id === "new" ? "" : rule_id;
     $.ajax({
-        url: `${window.location.href}/api/rules/${rule_id}`,
-        method: 'put',
+        url: `${window.location.href}/api/rules/${rule_id_to_use}`,
+        method: rule_id_to_use ? 'put' : 'post',
         context: document.body,
         data: JSON.stringify({
             'service': service,
@@ -353,7 +401,11 @@ upsert_rule = (rule_id, service, source, comment, expiry) => {
         bastinon_rules = data['rules'];
 
         update_rules();
+    }).fail((data) => {
+        alert(`Failed!`);
     });
+
+    return true;
 }
 
 delete_rule = (rule_id) => {
@@ -366,6 +418,8 @@ delete_rule = (rule_id) => {
         bastinon_rules = data['rules'];
 
         update_rules();
+    }).fail((data) => {
+        alert(`Failed!`);
     });
 }
 
