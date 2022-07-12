@@ -92,18 +92,12 @@ def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
 
 
 def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bool, forced: bool) -> None:
-    if simulation and forced:
-        raise ValueError("Cannot both simulate and force update!")
-
     reader = RuleReader(rules_path)
     rules = reader.read_all_users()
 
     # Test the newly read rules
-    if not forced:
-        log.info("Changes:")
-        changes = rule_engine.simulate(rules)
-    else:
-        changes = True
+    log.info("Changes:")
+    changes = rule_engine.simulate(rules, forced)
 
     if not changes:
         log.info("All ok, no changes")
