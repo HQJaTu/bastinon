@@ -138,7 +138,7 @@ class Iptables(FirewallBase):
         """
         Set rules to firewall
         :param rules: List of firewall rules to set
-        :param force: Force flush the chain with new rules
+        :param force: Force set all rules ignoring any possible existing rules
         :return:
         """
         _, ipv4_rules_to_remove, ipv4_rules_to_add, \
@@ -209,17 +209,19 @@ class Iptables(FirewallBase):
                 if p.returncode != 0:
                     raise RuntimeError("Failed to add IPtables IPv6 rule: '{}'".format(str(rule)))
 
-    def simulate(self, rules: List[UserRule]) -> Union[bool, List[str]]:
+    def simulate(self, rules: List[UserRule], force=False) -> Union[bool, List[str]]:
         """
         Show what would happen if set rules to firewall
-        :param rules:
+        :param rules: List of firewall rules to simulate
+        :param force: Force simulate all rules ignoring any possible existing rules
         :return: list of strings, what firewall would need to do to make rules effective
         """
         _, ipv4_rules_to_remove, ipv4_rules_to_add, \
         _, ipv6_rules_to_remove, ipv6_rules_to_add, \
         changes_needed = \
-            self._sync_rules(rules, False)
+            self._sync_rules(rules, force)
 
+        log.debug("IPtables simulate(), changes_needed = {}".format(changes_needed))
         if not changes_needed:
             return False
 
@@ -281,6 +283,11 @@ class Iptables(FirewallBase):
         ipv6_rules_to_remove = []
 
         for idx, rule in enumerate(user_rules):
+            if rule.network_size_valid(False) is False:
+                log.warning("Skipping IPv{} network {} of size /{}".format(
+                    rule.source_address_family, rule.source, rule.source_address.prefixlen
+                ))
+                continue
             if rule.source_address_family == 4:
                 ipv4_rules_to_add.append(rule)
             elif rule.source_address_family == 6:

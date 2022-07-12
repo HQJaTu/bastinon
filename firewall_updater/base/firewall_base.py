@@ -58,16 +58,17 @@ class FirewallBase(ABC):
         """
         Set rules to firewall
         :param rules: List of firewall rules to set
-        :param force: Force set all rules
+        :param force: Force set all rules ignoring any possible existing rules
         :return:
         """
         pass
 
     @abstractmethod
-    def simulate(self, rules: List[UserRule]) -> Union[bool, List[str]]:
+    def simulate(self, rules: List[UserRule], force=False) -> Union[bool, List[str]]:
         """
         Show what would happen if set rules to firewall
-        :param rules:
+        :param rules: List of firewall rules to simulate
+        :param force: Force simulate all rules ignoring any possible existing rules
         :return: list of strings, what firewall would need to do to make rules effective
         """
         pass
