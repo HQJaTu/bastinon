@@ -301,6 +301,7 @@ class FirewallUpdaterService(service.Object):
             rules[matching_hash_idx].source = source
             rules[matching_hash_idx].expiry = expiry
             rules[matching_hash_idx].comment = comment
+            rules[matching_hash_idx].network_size_valid(True)
             hash_to_return = self._rule_hash(rules[matching_hash_idx])
             log.debug("Updated rule {}. New Hash: {}".format(existing_rule_hash, hash_to_return))
         else:
@@ -308,6 +309,7 @@ class FirewallUpdaterService(service.Object):
             new_rule = UserRule(user, service, source, expiry=expiry, comment=comment)
             rules.append(new_rule)
             hash_to_return = self._rule_hash(new_rule)
+            new_rule.network_size_valid(True)
             log.debug("Added rule: {}".format(hash_to_return))
 
         # Go write!
