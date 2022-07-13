@@ -37,8 +37,9 @@ get '/' => sub {
     my ($name, $passwd, $uid, $gid, $quota, $comment, $gcos, $dir, $shell, $expire) = getpwnam($requesting_user);
     my ($user_name, $_) = split(/,/, $gcos, 2); # Assume first comma-separated field of GECOS is user's full name.
     $c->stash(
-        name     => $name . " / " . $user_name,
-        base_url => $c->req->url
+        name      => $name . " / " . $user_name,
+        base_url  => $c->req->url,
+        remote_ip => $c->tx->remote_address
     );
     $c->render(template => 'index');
 };
@@ -220,12 +221,18 @@ input:invalid, select:invalid {
 .action_input {
     width: 150px;
 }
+.ip-address_display {
+    background-color: #f8f8f8;
+    width: 200px;
+    text-align: right;
+}
 </style>
 </head>
 
 <body>
 <h1>Firewall Rules</h1>
-Hello <%= $name %>
+<p>Hello <%= $name %></p>
+<p>Your request originates from: <input type="text" value="<%= $remote_ip %>" readonly class="ip-address_display" /></p>
 <div id="rules_table_holder">
     <h2>... Loading rules ...</h2>
 </div>
