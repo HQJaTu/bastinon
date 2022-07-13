@@ -10,10 +10,11 @@ use Mojolicious::Lite;
 use Mojo::HTTPStatus qw(OK MOVED_PERMANENTLY FOUND SEE_OTHER FORBIDDEN NOT_FOUND NOT_ACCEPTABLE);
 use Mojo::JSON qw(decode_json encode_json);
 use Net::DBus;
-use Net::Whois::RIS;
+use Net::Whois::IP qw(whoisip_query);
 use Data::Validate::IP qw(is_ipv4 is_ipv6 is_public_ip);
 use Encode;
 
+use constant VERSION => '0.2';
 use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Firewall";
 
 
@@ -61,11 +62,13 @@ get '/' => sub {
 
     # Data to be stashed for later use in HTML-template:
     $c->stash(
-        name             => $name . " / " . $user_name,
-        base_url         => $c->req->url,
-        remote_ip        => $remote_ip,
-        remote_ip_family => $remote_ip_family,
-        remote_ip_public => $remote_ip_public ? "Public IPv" . $remote_ip_family : "non-public IPv" . $remote_ip_family
+        name                 => $name . " / " . $user_name,
+        base_url             => $c->req->url,
+        remote_ip            => $remote_ip,
+        remote_ip_family     => $remote_ip_family,
+        remote_ip_public     => $remote_ip_public ? 1 : 0,
+        remote_ip_public_str => $remote_ip_public ? "Public IPv" . $remote_ip_family : "non-public IPv" . $remote_ip_family,
+        version              => VERSION
     );
     $c->render(template => 'index');
 };
@@ -75,23 +78,31 @@ get '/api/remote/network' => sub {
 
     my $remote_ip = $c->tx->remote_address;
     my $remote_ip_public = is_public_ip($remote_ip);
-    my $remote_ip_network = undef;
+    my $success = \0; # Perl JSON -trickery, will convert 0 to False and 1 to True
+    my $remote_network = undef;
+    my $remote_org_name = undef;
     if ($remote_ip_public) {
         app->log->debug(sprintf("Remote IP %s public, querying", $remote_ip));
-        my $foo = Net::Whois::RIS->new();
-        $foo->getIPInfo($remote_ip);
-        $remote_ip_network = "nw: " . $foo->getOrigin();
-        app->log->debug();
-        app->log->debug($foo->getDescr());
+        # Net::Whois::IP::whois_servers contains list of sources
+        my ($response, $array_of_responses) = whoisip_query($remote_ip, 'RIPE', 0); # Do not search multiple servers
+
+        $remote_ip_public = \1;
+        $success = \1;
+        $remote_network = $response->{'route'};
+        $remote_org_name = $response->{'org-name'};
+        $remote_org_name = $response->{'netname'} if (!$remote_org_name);
     }
     else {
+        $remote_ip_public = \0;
         app->log->debug(sprintf("Remote IP %s not public", $remote_ip));
     }
 
     # Return
     my $json = {
-        remote_ip_public  => $remote_ip_public,
-        remote_ip_network => $remote_ip_network
+        remote_ip_public => $remote_ip_public,
+        query_done       => $success,
+        remote_network   => $remote_network,
+        remote_org_name  => $remote_org_name
     };
     $c->render(json => $json, status => OK);
 };
@@ -292,10 +303,10 @@ footer {
 <body>
 <h1>Firewall Rules</h1>
 <p>Hello <%= $name %></p>
-<p>
+<p id="network_info">
     Your request originates from:
     <input type="text" value="<%= $remote_ip %>" readonly class="ip-address_display" />
-    &nbsp;[a <%= $remote_ip_public %>]
+    &nbsp;[a <%= $remote_ip_public_str %>]
 </p>
 <div id="rules_table_holder">
     <h2>... Loading rules ...</h2>
@@ -328,6 +339,27 @@ $(document).ready(() => {
 
         update_rules();
     });
+
+    // For public networks: Query for if network information was possibly available:
+    if (<%= $remote_ip_public %>) {
+        $.ajax({
+            url: `${window.location.href}/api/remote/network`,
+            method: 'get',
+            context: document.body
+        }).done((data) => {
+            console.log("ready(): got network");
+            const para = $("#network_info");
+            if (data["query_done"]) {
+                const line_break = $('<br/>');
+                const span = $('<span></span>');
+                span.text(`Network: ${data["remote_network"]}, Organization: ${data["remote_org_name"]}`);
+                para.append(line_break);
+                para.append(span);
+            }
+
+            update_rules();
+        });
+    }
 
     // Refresh-button:
     $("#reload_rules_btn").click(() => {
@@ -585,6 +617,6 @@ rules_into_effect = () => {
 
 // end JavaScript
 </script>
-<footer>Version: 0.1, äöÖÄ</footer>
+<footer>Version: <%= $version %></footer>
 </body>
 </html>
