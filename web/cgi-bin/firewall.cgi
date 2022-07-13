@@ -1,14 +1,18 @@
-#!/usr/bin/perl -w --
+#!/usr/bin/perl -wT --
 
 use utf8;
 use strict;
 use warnings;
 
 use CGI::Carp qw(fatalsToBrowser);
+use open ':encoding(UTF-8)'; # Default encoding of file handles.
 use Mojolicious::Lite;
 use Mojo::HTTPStatus qw(OK MOVED_PERMANENTLY FOUND SEE_OTHER FORBIDDEN NOT_FOUND NOT_ACCEPTABLE);
 use Mojo::JSON qw(decode_json encode_json);
 use Net::DBus;
+use Net::Whois::RIS;
+use Data::Validate::IP qw(is_ipv4 is_ipv6 is_public_ip);
+use Encode;
 
 use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Firewall";
 
@@ -21,10 +25,25 @@ sub _get_dbus() {
     # Get a handle to the Firewall updater service
     my $proxy = $bus->get_service(FIREWALL_UPDATER_SERVICE_BUS_NAME);
     # Get the device manager
-    my $manager = $proxy->get_object('/' . FIREWALL_UPDATER_SERVICE_BUS_NAME =~ s:\.:/:gr,
-        FIREWALL_UPDATER_SERVICE_BUS_NAME);
+    my $object_path = '/' . FIREWALL_UPDATER_SERVICE_BUS_NAME =~ s:\.:/:gr;
+    my $interface = FIREWALL_UPDATER_SERVICE_BUS_NAME;
+    my $manager = $proxy->get_object($object_path, $interface);
 
     return $manager;
+}
+
+sub _post_process_rules(\@) {
+    my ($rules_ref) = @_;
+
+    # Post-process:
+    # D-Bus uses internally only UTF-8. Characters arriving into Perl won't be correctly decoded.
+    # Do the decoding here. Iterating dbus_array() is tricky! It doesn't behave like regular Perl array.
+    for my $rule_idx (0 .. $#{$rules_ref}) {
+        my $comment = $rules_ref->[$rule_idx][4];
+        next if (!$comment);
+
+        $rules_ref->[$rule_idx][4] = Encode::decode("UTF-8", $comment);
+    }
 }
 
 get '/' => sub {
@@ -36,12 +55,45 @@ get '/' => sub {
     }
     my ($name, $passwd, $uid, $gid, $quota, $comment, $gcos, $dir, $shell, $expire) = getpwnam($requesting_user);
     my ($user_name, $_) = split(/,/, $gcos, 2); # Assume first comma-separated field of GECOS is user's full name.
+    my $remote_ip = $c->tx->remote_address;
+    my $remote_ip_family = is_ipv4($remote_ip) ? 4 : is_ipv6($remote_ip) ? 6 : 0;
+    my $remote_ip_public = is_public_ip($remote_ip);
+
+    # Data to be stashed for later use in HTML-template:
     $c->stash(
-        name      => $name . " / " . $user_name,
-        base_url  => $c->req->url,
-        remote_ip => $c->tx->remote_address
+        name             => $name . " / " . $user_name,
+        base_url         => $c->req->url,
+        remote_ip        => $remote_ip,
+        remote_ip_family => $remote_ip_family,
+        remote_ip_public => $remote_ip_public ? "Public IPv" . $remote_ip_family : "non-public IPv" . $remote_ip_family
     );
     $c->render(template => 'index');
+};
+
+get '/api/remote/network' => sub {
+    my ($c) = @_;
+
+    my $remote_ip = $c->tx->remote_address;
+    my $remote_ip_public = is_public_ip($remote_ip);
+    my $remote_ip_network = undef;
+    if ($remote_ip_public) {
+        app->log->debug(sprintf("Remote IP %s public, querying", $remote_ip));
+        my $foo = Net::Whois::RIS->new();
+        $foo->getIPInfo($remote_ip);
+        $remote_ip_network = "nw: " . $foo->getOrigin();
+        app->log->debug();
+        app->log->debug($foo->getDescr());
+    }
+    else {
+        app->log->debug(sprintf("Remote IP %s not public", $remote_ip));
+    }
+
+    # Return
+    my $json = {
+        remote_ip_public  => $remote_ip_public,
+        remote_ip_network => $remote_ip_network
+    };
+    $c->render(json => $json, status => OK);
 };
 
 get '/api/services' => sub {
@@ -76,6 +128,7 @@ get '/api/rules' => sub {
     my $manager = _get_dbus();
     my $user = getpwuid($<);
     my @rules = @{$manager->GetRules($user)};
+    _post_process_rules(@rules);
 
     # Return
     my $json = {
@@ -114,12 +167,13 @@ sub _post_or_put {
     );
 
     my @rules = @{$manager->GetRules($user)};
+    _post_process_rules(@rules);
 
     # Return
     my $json = {
-        "user"  => $user,
+        "user"    => $user,
         "rule_id" => $new_rule_id,
-        "rules" => [ @rules ]
+        "rules"   => [ @rules ]
     };
     $c->render(json => $json, status => OK);
 };
@@ -137,6 +191,7 @@ del '/api/rules/:id' => sub {
     );
 
     my @rules = @{$manager->GetRules($user)};
+    _post_process_rules(@rules);
 
     # Return
     my $json = {
@@ -173,6 +228,7 @@ put '/api/firewall/update' => sub {
     $c->render(json => $json, status => OK);
 };
 
+app->secrets([ 'BastiNon is a non-bastion bastion' ]);
 app->start();
 
 __DATA__
@@ -226,13 +282,21 @@ input:invalid, select:invalid {
     width: 200px;
     text-align: right;
 }
+footer {
+    color: #cccccc;
+    padding-top: 20px;
+}
 </style>
 </head>
 
 <body>
 <h1>Firewall Rules</h1>
 <p>Hello <%= $name %></p>
-<p>Your request originates from: <input type="text" value="<%= $remote_ip %>" readonly class="ip-address_display" /></p>
+<p>
+    Your request originates from:
+    <input type="text" value="<%= $remote_ip %>" readonly class="ip-address_display" />
+    &nbsp;[a <%= $remote_ip_public %>]
+</p>
 <div id="rules_table_holder">
     <h2>... Loading rules ...</h2>
 </div>
@@ -508,5 +572,6 @@ rules_into_effect = () => {
 
 // end JavaScript
 </script>
+<footer>Version: 0.1, äöÖÄ</footer>
 </body>
 </html>
