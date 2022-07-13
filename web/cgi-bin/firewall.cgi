@@ -389,9 +389,9 @@ update_rules = () => {
       <select id="service_${rule_id}" required class="service_input">${service_opts}</select>
     </form>
   </td>
-  <td><input type="text" form="rules_form_${rule_id}" id="source_${rule_id}" required value="${rule[3]}" class="source_input"></td>
-  <td><input type="text" form="rules_form_${rule_id}" id="comment_${rule_id}" value="${rule[4]}" class="comment_input"></td>
-  <td><input type="datetime-local" form="rules_form_${rule_id}" id="expiry_${rule_id}" value="${rule[5]}" class="expiry_input"></td>
+  <td><input type="text" form="rules_form_${rule_id}" id="source_${rule_id}" required class="source_input"></td>
+  <td><input type="text" form="rules_form_${rule_id}" id="comment_${rule_id}" class="comment_input"></td>
+  <td><input type="datetime-local" form="rules_form_${rule_id}" id="expiry_${rule_id}" class="expiry_input"></td>
   <td class="effective_column">${rule_effective}</td>
   <td class="center_align" class="action_input">
     <button id="update_rule_btn_${rule_id}" form="rules_form_${rule_id}">Update</button>
@@ -437,6 +437,19 @@ update_rules = () => {
 </tr>
 ${html}
 </table>`);
+
+    // Add values to fields as post-process.
+    // This way we won't have to escape HTML-entities.
+    for (const rule of bastinon_rules) {
+        const rule_id = rule[0];
+        const source_field = $(`#source_${rule_id}`);
+        const comment_field = $(`#comment_${rule_id}`);
+        const expiry_field = $(`#expiry_${rule_id}`);
+
+        source_field.val(rule[3]);
+        comment_field.val(rule[4]);
+        expiry_field.val(rule[5]);
+    }
 
     // Event handers for buttons and forms:
     for (const rule_id of update_button_ids) {
