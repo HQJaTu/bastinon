@@ -335,7 +335,8 @@ class Iptables(FirewallBase):
                 # Match: 1) Service 2) Source address 3) Comment
                 if rule == active_rule:
                     # Found match!
-                    if not matched_rules[idx]:
+                    # Check if the rule hasn't expired and hasn't been matched already.
+                    if idx in matched_rules and not matched_rules[idx]:
                         # A service can contain multiple protocols and ports.
                         # Append to list only if user rule not matched already.
                         matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
@@ -362,7 +363,8 @@ class Iptables(FirewallBase):
                 # Match: 1) Service 2) Source address 3) Comment
                 if rule == active_rule:
                     # Found match!
-                    if not matched_rules[idx]:
+                    # Check if the rule hasn't expired and hasn't been matched already.
+                    if idx in matched_rules and not matched_rules[idx]:
                         # A service can contain multiple protocols and ports.
                         # Append to list only if user rule not matched already.
                         matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
@@ -379,7 +381,8 @@ class Iptables(FirewallBase):
 
         # Un-matched rules:
         for idx, rule in enumerate(user_rules):
-            if matched_rules[idx]:
+            # Check if the rule hasn't expired and hasn't been matched already.
+            if idx in matched_rules and matched_rules[idx]:
                 # This one is already matched
                 continue
 
