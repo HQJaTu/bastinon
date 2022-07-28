@@ -304,10 +304,11 @@ footer {
 <body>
 <h1>Firewall Rules</h1>
 <p>Hello <%= $name %></p>
-<p id="network_info">
+<p>
     Your request originates from:
     <input type="text" value="<%= $remote_ip %>" readonly id="ip-address" class="ip-address_display" />
-    &nbsp;[a <%= $remote_ip_public_str %>]
+    &nbsp;[a <%= $remote_ip_public_str %>]<br/>
+    <span id="network_info"></span>
 </p>
 <div id="rules_table_holder">
     <h2>... Loading rules ...</h2>
@@ -341,30 +342,8 @@ $(document).ready(() => {
         update_rules();
     });
 
-    // For public networks: Query for if network information was possibly available:
-    if (<%= $remote_ip_is_public %>) {
-        $.ajax({
-            url: `${window.location.href}/api/remote/network`,
-            method: 'get',
-            context: document.body
-        }).done((data) => {
-            console.log("ready(): got network");
-            const para = $("#network_info");
-            if (data["query_done"]) {
-                // Update network name
-                const line_break = $('<br/>');
-                const span = $('<span></span>');
-                span.text(`Network: ${data["remote_network"]}, Organization: ${data["remote_org_name"]}`);
-                para.append(line_break);
-                para.append(span);
-
-                // Update IP-address
-                $("#ip-address").val(data["remote_ip"])
-            }
-
-            update_rules();
-        });
-    }
+    // Query for if network information was possibly available
+    network_information();
 
     // Refresh-button:
     $("#reload_rules_btn").click(() => {
@@ -617,6 +596,34 @@ rules_into_effect = () => {
         query_firewall_status();
     }).fail((data) => {
         alert(`Failed!`);
+    });
+}
+
+network_information = () => {
+    // Mostly for public networks: Query for if network information was possibly available.
+    // Make sure originating IP-address will be updated in any case.
+    $.ajax({
+        url: `${window.location.href}/api/remote/network`,
+        method: 'get',
+        context: document.body
+    }).done((data) => {
+        console.log("ready(): got network");
+        const para = $("#network_info");
+        if (data["query_done"]) {
+            // Update network name
+            const line_break = $('<br/>');
+            para.empty();
+            para.text(`Network: ${data["remote_network"]}, Organization: ${data["remote_org_name"]}`);
+        } else {
+            // Clean out contents of the <p>
+            para.empty();
+            para.text(`Non-public network`);
+        }
+
+        // Update IP-address
+        $("#ip-address").val(data["remote_ip"])
+
+        update_rules();
     });
 }
 
