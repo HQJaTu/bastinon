@@ -58,7 +58,7 @@ get '/' => sub {
     my ($user_name, $_) = split(/,/, $gcos, 2); # Assume first comma-separated field of GECOS is user's full name.
     my $remote_ip = $c->tx->remote_address;
     my $remote_ip_family = is_ipv4($remote_ip) ? 4 : is_ipv6($remote_ip) ? 6 : 0;
-    my $remote_ip_public = is_public_ip($remote_ip);
+    my $remote_ip_is_public = is_public_ip($remote_ip);
 
     # Data to be stashed for later use in HTML-template:
     $c->stash(
@@ -66,8 +66,8 @@ get '/' => sub {
         base_url             => $c->req->url,
         remote_ip            => $remote_ip,
         remote_ip_family     => $remote_ip_family,
-        remote_ip_public     => $remote_ip_public ? 1 : 0,
-        remote_ip_public_str => $remote_ip_public ? "Public IPv" . $remote_ip_family : "non-public IPv" . $remote_ip_family,
+        remote_ip_is_public  => $remote_ip_is_public ? 1 : 0,
+        remote_ip_public_str => $remote_ip_is_public ? "Public IPv" . $remote_ip_family : "non-public IPv" . $remote_ip_family,
         version              => VERSION
     );
     $c->render(template => 'index');
@@ -77,32 +77,33 @@ get '/api/remote/network' => sub {
     my ($c) = @_;
 
     my $remote_ip = $c->tx->remote_address;
-    my $remote_ip_public = is_public_ip($remote_ip);
+    my $remote_ip_is_public = is_public_ip($remote_ip);
     my $success = \0; # Perl JSON -trickery, will convert 0 to False and 1 to True
     my $remote_network = undef;
     my $remote_org_name = undef;
-    if ($remote_ip_public) {
+    if ($remote_ip_is_public) {
         app->log->debug(sprintf("Remote IP %s public, querying", $remote_ip));
         # Net::Whois::IP::whois_servers contains list of sources
         my ($response, $array_of_responses) = whoisip_query($remote_ip, 'RIPE', 0); # Do not search multiple servers
 
-        $remote_ip_public = \1;
+        $remote_ip_is_public = \1;
         $success = \1;
         $remote_network = $response->{'route'};
         $remote_org_name = $response->{'org-name'};
         $remote_org_name = $response->{'netname'} if (!$remote_org_name);
     }
     else {
-        $remote_ip_public = \0;
+        $remote_ip_is_public = \0;
         app->log->debug(sprintf("Remote IP %s not public", $remote_ip));
     }
 
     # Return
     my $json = {
-        remote_ip_public => $remote_ip_public,
-        query_done       => $success,
-        remote_network   => $remote_network,
-        remote_org_name  => $remote_org_name
+        remote_ip_is_public => $remote_ip_is_public,
+        remote_ip           => $remote_ip,
+        query_done          => $success,
+        remote_network      => $remote_network,
+        remote_org_name     => $remote_org_name
     };
     $c->render(json => $json, status => OK);
 };
@@ -305,7 +306,7 @@ footer {
 <p>Hello <%= $name %></p>
 <p id="network_info">
     Your request originates from:
-    <input type="text" value="<%= $remote_ip %>" readonly class="ip-address_display" />
+    <input type="text" value="<%= $remote_ip %>" readonly id="ip-address" class="ip-address_display" />
     &nbsp;[a <%= $remote_ip_public_str %>]
 </p>
 <div id="rules_table_holder">
@@ -341,7 +342,7 @@ $(document).ready(() => {
     });
 
     // For public networks: Query for if network information was possibly available:
-    if (<%= $remote_ip_public %>) {
+    if (<%= $remote_ip_is_public %>) {
         $.ajax({
             url: `${window.location.href}/api/remote/network`,
             method: 'get',
@@ -350,11 +351,15 @@ $(document).ready(() => {
             console.log("ready(): got network");
             const para = $("#network_info");
             if (data["query_done"]) {
+                // Update network name
                 const line_break = $('<br/>');
                 const span = $('<span></span>');
                 span.text(`Network: ${data["remote_network"]}, Organization: ${data["remote_org_name"]}`);
                 para.append(line_break);
                 para.append(span);
+
+                // Update IP-address
+                $("#ip-address").val(data["remote_ip"])
             }
 
             update_rules();
