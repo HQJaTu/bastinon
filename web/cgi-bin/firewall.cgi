@@ -12,6 +12,7 @@ use Mojo::JSON qw(decode_json encode_json);
 use Net::DBus;
 use Net::Whois::IP qw(whoisip_query);
 use Data::Validate::IP qw(is_ipv4 is_ipv6 is_public_ip);
+use NetAddr::IP;
 use Encode;
 
 use constant VERSION => '0.2';
@@ -33,13 +34,36 @@ sub _get_dbus() {
     return $manager;
 }
 
-sub _post_process_rules(\@) {
-    my ($rules_ref) = @_;
+sub _post_process_rules(\@$) {
+    my ($rules_ref, $remote_ip) = @_;
 
+    my $remote_ip_family = 0;
+    my $remote_ip_object;
+    if ($remote_ip) {
+        $remote_ip_family = is_ipv4($remote_ip) ? 4 : is_ipv6($remote_ip) ? 6 : 0;
+        $remote_ip_object = NetAddr::IP->new($remote_ip);
+    }
     # Post-process:
     # D-Bus uses internally only UTF-8. Characters arriving into Perl won't be correctly decoded.
     # Do the decoding here. Iterating dbus_array() is tricky! It doesn't behave like regular Perl array.
     for my $rule_idx (0 .. $#{$rules_ref}) {
+        # Do some source matching
+        my $source = $rules_ref->[$rule_idx][3];
+        my $source_ip_family = is_ipv4($source) ? 4 : is_ipv6($source) ? 6 : 0;
+        my $source_space = NetAddr::IP->new($source);
+        my $source_match = 0;
+        if ($remote_ip_family eq 4 && $source_ip_family eq 4) {
+           if ($source_space->contains($remote_ip_object)) {
+               $source_match = 1;
+           }
+        } elsif ($remote_ip_family eq 6 && $source_ip_family eq 6) {
+            if ($source_space->contains($remote_ip_object)) {
+                $source_match = 1;
+            }
+        }
+        push(@{$rules_ref->[$rule_idx]}, $source_match);
+
+        # Process comment (if any)
         my $comment = $rules_ref->[$rule_idx][4];
         next if (!$comment);
 
@@ -140,7 +164,8 @@ get '/api/rules' => sub {
     my $manager = _get_dbus();
     my $user = getpwuid($<);
     my @rules = @{$manager->GetRules($user)};
-    _post_process_rules(@rules);
+    my $remote_ip = $c->tx->remote_address;
+    _post_process_rules(@rules, $remote_ip);
 
     # Return
     my $json = {
@@ -165,6 +190,7 @@ sub _post_or_put {
     # Docs: https://restfulapi.net/rest-put-vs-post/
     my ($c) = @_;
 
+    my $remote_ip = $c->tx->remote_address;
     my $rule_id = $c->param('id');
     my $body_json = decode_json($c->req->body);
     my $manager = _get_dbus();
@@ -179,7 +205,7 @@ sub _post_or_put {
     );
 
     my @rules = @{$manager->GetRules($user)};
-    _post_process_rules(@rules);
+    _post_process_rules(@rules, $remote_ip);
 
     # Return
     my $json = {
@@ -194,6 +220,7 @@ del '/api/rules/:id' => sub {
     # Docs: https://restfulapi.net/rest-put-vs-post/
     my ($c) = @_;
 
+    my $remote_ip = $c->tx->remote_address;
     my $rule_id = $c->param('id');
     my $manager = _get_dbus();
     my $user = getpwuid($<);
@@ -203,7 +230,7 @@ del '/api/rules/:id' => sub {
     );
 
     my @rules = @{$manager->GetRules($user)};
-    _post_process_rules(@rules);
+    _post_process_rules(@rules, $remote_ip);
 
     # Return
     my $json = {
@@ -293,6 +320,9 @@ input:invalid, select:invalid {
     background-color: #f8f8f8;
     width: 200px;
     text-align: right;
+}
+.matching-rule {
+    background-color: #dfa4a4;
 }
 footer {
     color: #cccccc;
@@ -397,9 +427,10 @@ update_rules = () => {
                 service_opts += `<option value="${service[0]}">${service[1]}</option>`;;
             }
         }
+        const row_class = rule[7] ? "matching-rule" : "non-matching-rule";
 
         // Go for HTML:
-        html += `<tr>
+        html += `<tr class="${row_class}">
   <td>
     <form id="rules_form_${rule_id}">
       <select id="service_${rule_id}" required class="service_input">${service_opts}</select>
