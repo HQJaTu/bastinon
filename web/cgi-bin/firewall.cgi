@@ -322,7 +322,7 @@ input:invalid, select:invalid {
     text-align: right;
 }
 .matching-rule {
-    background-color: #dfa4a4;
+    background-color: #a4dfa4;
 }
 footer {
     color: #cccccc;
@@ -352,6 +352,8 @@ footer {
 <script>
 let bastinon_services = null;
 let bastinon_rules = null;
+let bastinon_rule_load_time = null;
+const bastinon_rule_expiry_time = 3600; // Seconds
 let bastinon_needs_updating = false;
 
 $(document).ready(() => {
@@ -386,6 +388,18 @@ $(document).ready(() => {
     });
 });
 
+$(document).on("visibilitychange", (ev) => {
+    //console.log(`Visibility changed: ${document.visibilityState}`);
+    if (document.visibilityState === 'visible') {
+        if (bastinon_rule_load_time) {
+            const last_load_time_diff = new Date(Date.now()) - bastinon_rule_load_time;
+            if (last_load_time_diff > bastinon_rule_expiry_time * 1000) {
+                load_rules(true);
+            }
+        }
+    }
+});
+
 load_rules = (update_ui) => {
     // Docs: https://api.jquery.com/jquery.ajax/
     $.ajax({
@@ -395,6 +409,7 @@ load_rules = (update_ui) => {
     }).done((data) => {
         console.log("load_rules(): got rules");
         bastinon_rules = data['rules'];
+        bastinon_rule_load_time = new Date(Date.now());
 
         if (update_ui) {
             update_rules();
