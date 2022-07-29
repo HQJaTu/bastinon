@@ -15,7 +15,7 @@ use Data::Validate::IP qw(is_ipv4 is_ipv6 is_public_ip);
 use NetAddr::IP;
 use Encode;
 
-use constant VERSION => '0.2';
+use constant VERSION => '0.9';
 use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Firewall";
 
 
