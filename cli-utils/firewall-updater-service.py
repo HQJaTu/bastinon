@@ -99,7 +99,8 @@ def daemon(use_system_bus: bool, firewall: FirewallBase, firewall_rules_path: st
 
         def _cancel_handler(num: int) -> None:
             name = signal.Signals(num).name
-            log.warning('Firewall Updater service received signal: {} ({}). Setting cancellation event.'.format(name, num))
+            log.warning(
+                'Firewall Updater service received signal: {} ({}). Setting cancellation event.'.format(name, num))
             cancellation_event.set()
             cancellation_event.signal = num
 
@@ -155,6 +156,14 @@ def daemon(use_system_bus: bool, firewall: FirewallBase, firewall_rules_path: st
     log.info("Done monitoring for firewall changes.")
 
 
+class NegateAction(argparse.Action):
+    """
+    Argparse helper
+    """
+    def __call__(self, parser, ns, values, option):
+        setattr(ns, self.dest, option[2:5] != 'non')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Firewall Updates daemon')
     parser.add_argument('bus_type', metavar='BUS-TYPE-TO-USE', choices=[BUS_SYSTEM, BUS_SESSION],
@@ -165,6 +174,9 @@ def main() -> None:
                         default=DEFAULT_SYSTEMD_WATCHDOG_TIME,
                         help="How often systemd watchdog is notified. "
                              "Default: {} seconds".format(DEFAULT_SYSTEMD_WATCHDOG_TIME))
+    parser.add_argument('--stateful', '--non-stateful', dest='stateful',
+                        action=NegateAction, nargs=0,
+                        help="Do not use stateful TCP firewall. Default: use stateful")
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
     args = parser.parse_args()
@@ -179,7 +191,7 @@ def main() -> None:
         raise ValueError("Internal: Which bus?")
 
     reader = ServiceReader(args.rule_path)
-    iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT")
+    iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT", args.stateful)
 
     log.info('Starting up ...')
     daemon(

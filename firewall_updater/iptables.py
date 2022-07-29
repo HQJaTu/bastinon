@@ -58,7 +58,13 @@ class MatchedIptablesRule(UserRule):
 
 class Iptables(FirewallBase):
 
-    def __init__(self, services: Dict[str, Service], chain_name: str):
+    def __init__(self, services: Dict[str, Service], chain_name: str, stateful: bool):
+        """
+        Initialize Linux IPtables firewall
+        :param services: List of defined services
+        :param chain_name: Name of IPtables ipchain
+        :param stateful: TCP and UDP, True = -m state --state NEW, False = don't add
+        """
         super().__init__(services)
 
         if not chain_name:
@@ -70,6 +76,8 @@ class Iptables(FirewallBase):
         self._ip6tables_cmd = shutil.which("ip6tables")
         if not self._ip6tables_cmd:
             raise ValueError("Cannot find exact location of ip6tables-command! Failing to continue.")
+
+        self.stateful = stateful
 
     #
     # Abstract implementation for IPtables
@@ -288,6 +296,8 @@ class Iptables(FirewallBase):
                     rule.source_address_family, rule.source, rule.source_address.prefixlen
                 ))
                 continue
+            if rule.comment and len(rule.comment) > 256:
+                raise ValueError("IPtables comment can only be 256 characters long. Got: {}".format(len(rule.comment)))
             if rule.source_address_family == 4:
                 ipv4_rules_to_add.append(rule)
             elif rule.source_address_family == 6:
@@ -317,6 +327,9 @@ class Iptables(FirewallBase):
         # Index for all of the rules
         matched_rules = {}
         for idx, rule in enumerate(user_rules):
+            if rule.comment and len(rule.comment) > 256:
+                raise ValueError("IPtables comment can only be 256 characters long. Got: {}".format(len(rule.comment)))
+
             if rule.has_expired():
                 # Ah. Expired already. We won't be needing this rule in active ones.
                 continue
@@ -522,17 +535,26 @@ num  target     prot opt source               destination
                 raise ValueError("IPchain output error! Rule has unsupported proto '{}', "
                                  "rule: '{}'".format(proto, line.strip()))
             # Parse destination, it contains all possible options of iptables-rule
-            port = None
-            match = re.search(r'^\w+\s+dpt:(\d+)(\s+/\*\s+(.+)\s+\*/)?$', destination)
+            # We'll expect to see:
+            # 1: protocol
+            # 2: dpt:<port number>
+            # 3: [other options]
+            # 4: /* [optional comment] */
+            match = re.search(r'^(\w+)\s+dpt:(\d+)(\s+(.*))?$', destination)
             if not match:
-                raise ValueError("IPchain output error! Rule destination needs to be a simple port definition, "
+                raise ValueError("IPchain output error! Rule destination failing to parse, "
                                  "rule: '{}'".format(line.strip()))
-            port = int(match.group(1))
-            if match.group(2):
-                comment = match.group(3)
+            port = int(match.group(2))
+            comment = None
+            if match.group(3):
+                # Parse options/comment further.
+                # Comment is always last
+                options = match.group(4)
+                match = re.search(r'/\*\s+(.+)\s+\*/', options)
+                if match:
+                    # Options do contain a comment
+                    comment = match.group(1)
                 # log.debug("Comment: '{}'".format(comment))
-            else:
-                comment = None
 
             # XXX Debug noise:
             # log.debug("Parsed rule {}: {}, {}, {}".format(rule_num, proto, port, source_addr))
@@ -558,7 +580,11 @@ num  target     prot opt source               destination
             ipchain_rule = [
                 "-A", self._chain, "-p", proto, "-m", proto, "--source", rule.source, "--dport", port
             ]
+            if self.stateful:
+                # Docs: https://ipset.netfilter.org/iptables-extensions.man.html#lbCC
+                ipchain_rule.extend(["-m", "state", "--state", "NEW"])
             if rule.comment:
+                # Docs: https://ipset.netfilter.org/iptables-extensions.man.html#lbAK
                 ipchain_rule.extend(["-m", "comment", "--comment", rule.comment])
             ipchain_rule.extend(["-j", "ACCEPT"])
 

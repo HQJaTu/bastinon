@@ -131,6 +131,14 @@ def add_rule(user: str, service_code: str, source: str, comment: str, rules_path
     writer.write(user, rules)
 
 
+class NegateAction(argparse.Action):
+    """
+    Argparse helper
+    """
+    def __call__(self, parser, ns, values, option):
+        setattr(ns, self.dest, option[2:5] != 'non')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Firewall Updates daemon')
     parser.add_argument("rule_path", metavar="RULE-PATH",
@@ -139,6 +147,10 @@ def main() -> None:
                         help="(optional) Update rules for single user")
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
+    parser.add_argument('--stateful', '--non-stateful', dest='stateful',
+                        action=NegateAction, nargs=0,
+                        default=True,
+                        help="Do not use stateful TCP firewall. Default: use stateful")
     parser.add_argument('--force', action='store_true',
                         default=False,
                         help="Force firewall update")
@@ -162,7 +174,7 @@ def main() -> None:
         exit(0)
 
     reader = ServiceReader(args.rule_path)
-    iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT")
+    iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT", args.stateful)
 
     # read_rules_for_all_users(iptables_firewall, args.rule_path)
     # read_active_rules_from_firewall(iptables_firewall, args.rule_path)
