@@ -49,14 +49,15 @@ sub _post_process_rules(\@$) {
     for my $rule_idx (0 .. $#{$rules_ref}) {
         # Do some source matching
         my $source = $rules_ref->[$rule_idx][3];
-        my $source_ip_family = is_ipv4($source) ? 4 : is_ipv6($source) ? 6 : 0;
         my $source_space = NetAddr::IP->new($source);
+        # As source and source_space can be a network, we MUST provide is_ipv4() an address.
+        my $source_ip_family = is_ipv4($source_space->addr) ? 4 : is_ipv6($source_space->addr) ? 6 : 0;
         my $source_match = 0;
-        if ($remote_ip_family eq 4 && $source_ip_family eq 4) {
-           if ($source_space->contains($remote_ip_object)) {
-               $source_match = 1;
-           }
-        } elsif ($remote_ip_family eq 6 && $source_ip_family eq 6) {
+        if ($remote_ip_family == 4 && $source_ip_family == 4) {
+            if ($source_space->contains($remote_ip_object)) {
+                $source_match = 1;
+            }
+        } elsif ($remote_ip_family == 6 && $source_ip_family == 6) {
             if ($source_space->contains($remote_ip_object)) {
                 $source_match = 1;
             }
