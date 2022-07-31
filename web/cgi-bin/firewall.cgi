@@ -503,6 +503,7 @@ ${html}
 
     // Add values to fields as post-process.
     // This way we won't have to escape HTML-entities.
+    let source_matched = false;
     for (const rule of bastinon_rules) {
         const rule_id = rule[0];
         const source_field = $(`#source_${rule_id}`);
@@ -512,6 +513,18 @@ ${html}
         source_field.val(rule[3]);
         comment_field.val(rule[4]);
         expiry_field.val(rule[5]);
+
+        if (rule[7])
+            source_matched = true;
+    }
+    // UX-helper:
+    // For the new rule -row, add source value if not matched by any rule.
+    if (!source_matched) {
+        const rule_id = "new";
+        const source_field = $(`#source_${rule_id}`);
+        const current_ip = $("#ip-address").val();
+
+        source_field.val(current_ip);
     }
 
     // Event handers for buttons and forms:
@@ -668,7 +681,7 @@ network_information = () => {
         }
 
         // Update IP-address
-        $("#ip-address").val(data["remote_ip"])
+        $("#ip-address").val(data["remote_ip"]);
 
         update_rules();
     });
