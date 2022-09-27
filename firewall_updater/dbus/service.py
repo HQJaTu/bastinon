@@ -61,7 +61,7 @@ class FirewallUpdaterService(service.Object):
         self._firewall = firewall
         self._firewall_rules_path = firewall_rules_path
 
-        self._max_ipv4_network_size = 14
+        self._max_ipv4_network_size = None #14
         self._max_ipv6_network_size = None
 
     def _get_creds(self, bus_name: str):
@@ -317,8 +317,8 @@ class FirewallUpdaterService(service.Object):
             if new_rule.source_address_family == 6 and self._max_ipv6_network_size:
                 new_rule.max_ipv6_network_size = self._max_ipv6_network_size
             rules.append(new_rule)
-            hash_to_return = self._rule_hash(new_rule)
             new_rule.network_size_valid(True)
+            hash_to_return = self._rule_hash(new_rule)
             log.debug("Added rule: {}".format(hash_to_return))
 
         # Go write!

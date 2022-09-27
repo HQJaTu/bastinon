@@ -57,7 +57,8 @@ sub _post_process_rules(\@$) {
             if ($source_space->contains($remote_ip_object)) {
                 $source_match = 1;
             }
-        } elsif ($remote_ip_family == 6 && $source_ip_family == 6) {
+        }
+        elsif ($remote_ip_family == 6 && $source_ip_family == 6) {
             if ($source_space->contains($remote_ip_object)) {
                 $source_match = 1;
             }
@@ -196,14 +197,33 @@ sub _post_or_put {
     my $body_json = decode_json($c->req->body);
     my $manager = _get_dbus();
     my $user = getpwuid($<);
-    my $new_rule_id = $manager->UpsertRule(
-        $rule_id,
-        $user,
-        $body_json->{'service'},
-        $body_json->{'source'},
-        $body_json->{'comment'},
-        $body_json->{'expiry'}
-    );
+    my $new_rule_id = undef;
+    eval {
+        $new_rule_id = $manager->UpsertRule(
+            $rule_id,
+            $user,
+            $body_json->{'service'},
+            $body_json->{'source'},
+            $body_json->{'comment'},
+            $body_json->{'expiry'}
+        );
+    } or do {
+        my $e = $@;
+
+        if ($e =~ /\s+(\S+Error): ([^\n]+)$/s) {
+            # Parse Python error
+            $e = "$1: $2"
+        }
+
+        # Return error
+        my $json = {
+            "user"  => $user,
+            "error" => $e
+        };
+        $c->render(json => $json, status => NOT_ACCEPTABLE);
+
+        return;
+    };
 
     my @rules = @{$manager->GetRules($user)};
     _post_process_rules(@rules, $remote_ip);
@@ -599,7 +619,11 @@ upsert_rule = (rule_id, service, source, comment, expiry) => {
         update_rules();
         query_firewall_status();
     }).fail((data) => {
-        alert(`Failed!`);
+        if (data.responseJSON && data.responseJSON["error"]) {
+            alert(`Failed!\n${data.responseJSON["error"]}`);
+        } else {
+            alert(`Failed!`);
+        }
     });
 
     return true;

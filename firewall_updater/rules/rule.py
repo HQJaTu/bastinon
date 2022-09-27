@@ -91,8 +91,8 @@ class Rule:
         if self.source_address_family == 4:
             if self.source_address.prefixlen < self.max_ipv4_network_size:
                 if raise_on_invalid:
-                    raise ValueError("IPv4 network too big! Requested /{}, allowed /{}".format(
-                        self.source_address.prefixlen, self.max_ipv4_network_size
+                    raise ValueError("IPv4 network {} is too big! Requested /{}, allowed /{}".format(
+                        self.source_address, self.source_address.prefixlen, self.max_ipv4_network_size
                     ))
                 else:
                     return False
@@ -101,8 +101,8 @@ class Rule:
         elif self.source_address_family == 6:
             if self.source_address.prefixlen < self.max_ipv6_network_size:
                 if raise_on_invalid:
-                    raise ValueError("IPv6 network too big! Requested /{}, allowed /{}".format(
-                        self.source_address.prefixlen, self.max_ipv6_network_size
+                    raise ValueError("IPv6 network {} is too big! Requested /{}, allowed /{}".format(
+                        self.source_address, self.source_address.prefixlen, self.max_ipv6_network_size
                     ))
                 else:
                     return False
