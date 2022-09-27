@@ -61,6 +61,9 @@ class FirewallUpdaterService(service.Object):
         self._firewall = firewall
         self._firewall_rules_path = firewall_rules_path
 
+        self._max_ipv4_network_size = 14
+        self._max_ipv6_network_size = None
+
     def _get_creds(self, bus_name: str):
         # See: https://dbus.freedesktop.org/doc/dbus-specification.html#bus-messages-get-connection-credentials
         from _dbus_bindings import BUS_DAEMON_IFACE, BUS_DAEMON_NAME, BUS_DAEMON_PATH
@@ -270,7 +273,9 @@ class FirewallUpdaterService(service.Object):
         else:
             log.debug("Requested insert for user '{}', service: '{}'".format(user, service_code))
 
-        reader = RuleReader(self._firewall_rules_path)
+        reader = RuleReader(self._firewall_rules_path,
+                            max_ipv4_network_size=self._max_ipv4_network_size,
+                            max_ipv6_network_size=self._max_ipv6_network_size)
         rules = reader.read(str(user))  # Need to shake off dbus.String()
 
         # Match user given service
@@ -307,6 +312,10 @@ class FirewallUpdaterService(service.Object):
         else:
             # Create the new rule to be appended
             new_rule = UserRule(user, service, source, expiry=expiry, comment=comment)
+            if new_rule.source_address_family == 4 and self._max_ipv4_network_size:
+                new_rule.max_ipv4_network_size = self._max_ipv4_network_size
+            if new_rule.source_address_family == 6 and self._max_ipv6_network_size:
+                new_rule.max_ipv6_network_size = self._max_ipv6_network_size
             rules.append(new_rule)
             hash_to_return = self._rule_hash(new_rule)
             new_rule.network_size_valid(True)

@@ -33,7 +33,8 @@ log = logging.getLogger(__name__)
 class RuleReader:
     USERS_PATH = r"users"
 
-    def __init__(self, rule_path: str):
+    def __init__(self, rule_path: str,
+                 max_ipv4_network_size: int = None, max_ipv6_network_size: int = None):
         user_rule_path = "{}/{}".format(rule_path, self.USERS_PATH)
         if not os.path.exists(user_rule_path):
             raise ValueError("Rule path '{}' doesn't exist!".format(user_rule_path))
@@ -42,6 +43,9 @@ class RuleReader:
 
         self._path = rule_path
         self.all_services = None
+
+        self._max_ipv4_network_size = max_ipv4_network_size
+        self._max_ipv6_network_size = max_ipv6_network_size
 
     def _rule_filename(self, user: str) -> str:
         filename = "{}/{}/{}.xml".format(self._path, self.USERS_PATH, user)
@@ -88,6 +92,11 @@ class RuleReader:
 
         filename = self._rule_filename(user)
         rules = self._user_rule_reader(user, filename, self.all_services)
+        for rule in rules:
+            if rule.source_address_family == 4 and self._max_ipv4_network_size:
+                rule.max_ipv4_network_size = self._max_ipv4_network_size
+            if rule.source_address_family == 6 and self._max_ipv6_network_size:
+                rule.max_ipv6_network_size = self._max_ipv6_network_size
 
         return rules
 

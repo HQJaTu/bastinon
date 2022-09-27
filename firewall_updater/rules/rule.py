@@ -37,9 +37,23 @@ class Rule:
     def max_ipv4_network_size(self) -> int:
         return self._max_ipv4_network_size
 
+    @max_ipv4_network_size.setter
+    def max_ipv4_network_size(self, size: int) -> None:
+        if size < 1 or size > 32:
+            raise ValueError("Cannot set IPv4 network size policy of /{}!".format(size))
+
+        self._max_ipv4_network_size = size
+
     @property
     def max_ipv6_network_size(self) -> int:
         return self._max_ipv6_network_size
+
+    @max_ipv6_network_size.setter
+    def max_ipv6_network_size(self, size: int) -> None:
+        if size < 1 or size > 128:
+            raise ValueError("Cannot set IPv6 network size policy of /{}!".format(size))
+
+        self._max_ipv6_network_size = size
 
     def has_expired(self) -> bool:
         if not self.expiry:
@@ -96,7 +110,6 @@ class Rule:
                 return True
         else:
             raise RuntimeError("Internal: Unknown IP-address family.")
-
 
     @staticmethod
     def _parse_address(address_in) -> Tuple[int, Union[
