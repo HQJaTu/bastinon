@@ -1,0 +1,3 @@
+/usr/bin/python3.8		--	gen_context(system_u:object_r:bastinon_exec_t,s0)
+
+/var/lib/bastinon(/.*)?		gen_context(system_u:object_r:bastinon_var_lib_t,s0)
