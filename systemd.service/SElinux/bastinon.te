@@ -7,9 +7,10 @@ policy_module(bastinon, 1.0.0)
 
 type bastinon_t;
 type bastinon_exec_t;
+
 init_daemon_domain(bastinon_t, bastinon_exec_t)
 
-permissive bastinon_t;
+#permissive bastinon_t;
 
 type bastinon_var_lib_t;
 files_type(bastinon_var_lib_t)
@@ -18,6 +19,31 @@ files_type(bastinon_var_lib_t)
 #
 # bastinon local policy
 #
+
+require {
+    # Types used
+    type user_devpts_t;
+    type iptables_exec_t;
+    type iptables_var_run_t;
+    type system_dbusd_var_run_t;
+    type system_dbusd_t;
+    type httpd_user_script_t;
+    type sssd_public_t;
+    type sssd_t;
+    type sssd_var_lib_t;
+    type passwd_file_t;
+    type proc_t;
+    type proc_net_t;
+    type usermodehelper_t;
+    type kernel_t;
+    type bin_t; # /usr/sbin/iptables
+
+    # Classes used
+    class file { execute setattr read lock create execute_no_trans write getattr unlink append };
+    class chr_file { append read write };
+    class dbus { acquire_svc send_msg };
+}
+
 allow bastinon_t self:fifo_file rw_fifo_file_perms;
 allow bastinon_t self:unix_stream_socket create_stream_socket_perms;
 
@@ -31,3 +57,48 @@ domain_use_interactive_fds(bastinon_t)
 files_read_etc_files(bastinon_t)
 
 miscfiles_read_localization(bastinon_t)
+
+
+#
+# Added
+#
+
+# Stdout / Stderr
+allow bastinon_t user_devpts_t:chr_file { append read write getattr ioctl };
+
+# IPtables
+allow bastinon_t iptables_exec_t:file { getattr execute execute_no_trans open read map };
+allow bastinon_t iptables_var_run_t:file { lock open read };
+allow bastinon_t proc_t:filesystem { getattr };
+allow bastinon_t usermodehelper_t:file { read };
+allow bastinon_t bin_t:file { execute execute_no_trans }; # /usr/sbin/iptables
+allow bastinon_t self:capability { net_admin net_raw };
+
+# D-Bus
+allow bastinon_t self:unix_dgram_socket { create getattr getopt setopt write };
+allow bastinon_t system_dbusd_var_run_t:dir { search };
+allow bastinon_t system_dbusd_t:dbus { acquire_svc send_msg };
+allow bastinon_t system_dbusd_t:unix_stream_socket { connectto sendto };
+allow bastinon_t init_t:dbus { send_msg };
+allow init_t bastinon_t:dbus { send_msg };
+allow bastinon_t httpd_user_script_t:dbus { send_msg };
+
+# D-Bus: Systemd watchdog
+allow bastinon_t kernel_t:unix_dgram_socket { sendto };
+
+# D-Bus: Web / CGI
+allow httpd_user_script_t bastinon_t:dbus { send_msg };
+
+# Users?
+allow bastinon_t sssd_public_t:dir search;
+allow bastinon_t sssd_public_t:file map;
+allow bastinon_t sssd_public_t:file { getattr open read };
+allow bastinon_t sssd_t:unix_stream_socket connectto;
+allow bastinon_t sssd_var_lib_t:dir search;
+allow bastinon_t sssd_var_lib_t:sock_file write;
+allow bastinon_t proc_net_t:file getattr;
+allow bastinon_t self:rawip_socket { create getopt setopt };
+allow bastinon_t passwd_file_t:file { getattr open read };
+
+# ???
+#allow init_t bastinon_t:dbus send_msg;
