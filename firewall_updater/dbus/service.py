@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 # Docs:
 # https://dbus.freedesktop.org/doc/dbus-tutorial.html#bus-names
-FIREWALL_UPDATER_SERVICE_BUS_NAME = "fi.hqcodeshop.Firewall"
+FIREWALL_UPDATER_SERVICE_BUS_NAME = "fi.hqcodeshop.Bastinon"
 
 
 class FirewallUpdaterService(service.Object):
