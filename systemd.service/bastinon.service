@@ -3,9 +3,9 @@ Description=Bastinon - Bastion firewall rule updater
 
 [Service]
 Environment="DBUS_TO_USE=system"
-ExecStart=/usr/libexec/bastinon/bin/python /usr/libexec/bastinon/bin/firewall-updater-service.py $DBUS_TO_USE
+ExecStart=/usr/libexec/bastinon/bin/python /usr/libexec/bastinon/bin/bastinon-service.py $DBUS_TO_USE
 Type=notify
-CapabilityBoundingSet=CAP_AUDIT_WRITE CAP_DAC_READ_SEARCH CAP_IPC_LOCK CAP_SYS_NICE
+CapabilityBoundingSet=CAP_AUDIT_WRITE CAP_IPC_LOCK CAP_SYS_NICE
 NotifyAccess=main
 WatchdogSec=20s
 Restart=on-failure
