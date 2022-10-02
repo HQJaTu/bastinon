@@ -1,0 +1,91 @@
+{
+  "extensions": {
+    "enabled": [
+      "python_venv",
+      "blocks",
+      "macros",
+      "file_permissions",
+      "file_extras"
+    ]
+  },
+  "core": {
+    "group": "Application/System",
+    "license": "GPLv2",
+    "name": "Bastinon",
+    "summary": "Bastinon - Non-bastion bastion. Toolkit to maintain firewall rules",
+    "version": "0.1.0",
+    "release": "5"
+  },
+  "python_venv": {
+    "cmd": "python3 -m venv",
+    "flags": [
+      "--copies",
+      "--clear"
+    ],
+    "name": "bastinon",
+    "path": "/usr/libexec/",
+    "require_setup_py": true,
+    "use_pip_install": false,
+    "requirements": ["requirements.txt"]
+  },
+  "blocks": {
+    "desc": [
+      "Toolkit for remote firewall rules management"
+    ],
+    "changelog": [
+      "* Sun Oct 02 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.1.0-5",
+      "- Updated correct capabilities to Systemd service description",
+      "* Sun Oct 02 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.1.0-4",
+      "- Added information why IPtables-command will fail",
+      "* Sun Oct 02 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.1.0-3",
+      "- Improvements on Systemd service configuration",
+      "* Sun Oct 02 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.1.0-2",
+      "- Improvements on package SElinux and XSD",
+      "* Sun Oct 02 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.1.0-1",
+      "- Initial package"
+    ],
+    "post": [
+      "semanage fcontext -a -t bastinon_exec_t /usr/libexec/bastinon/bin/python",
+      "semanage fcontext -a -t lib_t /usr/libexec/bastinon/lib/",
+      "semanage fcontext -a -t bastinon_var_lib_t /var/lib/bastinon/"
+    ]
+  },
+  "macros": {
+    "macros": [
+      "__os_install_post %{nil}",
+      "_build_id_links none"
+    ]
+  },
+  "file_permissions": {
+    "user": "root",
+    "group": "root",
+    "create_user": false,
+    "create_group": false
+  },
+  "file_extras": {
+    "files": [
+      {
+        "src": "xml/service.xsd",
+        "dest": "usr/libexec/bastinon/xml-schemas/service.xsd"
+      },
+      {
+        "src": "xml/user_rule.xsd",
+        "dest": "usr/libexec/bastinon/xml-schemas/user_rule.xsd"
+      },
+      {
+        "src": "systemd.service/bastinon-dbus.conf",
+        "dest": "etc/dbus-1/system.d/bastinon-dbus.conf",
+        "config": "noreplace"
+      },
+      {
+        "src": "systemd.service/bastinon.service",
+        "dest": "usr/lib/systemd/system/bastinon.service"
+      },
+      {
+        "src": "rpm-package/bastinon-cmd",
+        "dest": "usr/bin/bastinon-cmd",
+        "attr": "755, -, -"
+      }
+    ]
+  }
+}

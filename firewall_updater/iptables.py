@@ -438,7 +438,10 @@ class Iptables(FirewallBase):
             stdout=subprocess.PIPE)
         output, err = p.communicate()
         if p.returncode != 0:
-            raise RuntimeError("Failed to query for IPtables rules with command: {}".format(command_to_run))
+            raise RuntimeError("Failed to query for IPtables rules. "
+                               "Exit code: {} Command: {} Stdout: {} Stderr: {}".format(
+                p.returncode, command_to_run, output, err
+            ))
 
         """
 Chain Example-Chain-INPUT (1 references)

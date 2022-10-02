@@ -1,3 +1,6 @@
+# RPM packaging
+rpm.json
+
 # SElinux
 systemd.service/SElinux/bastinon.pp
 systemd.service/SElinux/tmp/

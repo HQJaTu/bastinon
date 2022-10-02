@@ -25,14 +25,17 @@ setup(
     ],
     python_requires='>=3.8, <4',
     install_requires=[
-        'lxml',
+        'lxml==4.8.0',
         'dbus-python==1.2.18',
         'systemd==0.16.1',
         'systemd-watchdog==0.9.0',
         'asyncio_glib',
         'asyncio-periodic'
     ],
-    scripts=['cli-utils/firewall-updater-service.py'],
+    scripts=[
+        'cli-utils/bastinon-cmd.py',
+        'cli-utils/bastinon-service.py'
+    ],
     data_files=[
         ('xml-schemas', ['xml/service.xsd', 'xml/user_rule.xsd'])
     ],

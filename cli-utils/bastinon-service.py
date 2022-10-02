@@ -73,7 +73,6 @@ async def _systemd_mock_watchdog() -> None:
 
 
 def daemon(use_system_bus: bool, firewall: FirewallBase, firewall_rules_path: str, watchdog_time: int) -> None:
-    wd = watchdog()
     dbus_loop = DBusGMainLoop(set_as_default=True)
     asyncio.set_event_loop_policy(asyncio_glib.GLibEventLoopPolicy())
     asyncio_loop = asyncio.get_event_loop()
@@ -189,6 +188,10 @@ def main() -> None:
         using_system_bus = False
     else:
         raise ValueError("Internal: Which bus?")
+
+    # Watchdog
+    global wd
+    wd = watchdog()
 
     reader = ServiceReader(args.rule_path)
     iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT", args.stateful)

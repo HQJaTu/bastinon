@@ -3,11 +3,14 @@ Description=Bastinon - Bastion firewall rule updater
 
 [Service]
 Environment="DBUS_TO_USE=system"
-ExecStart=/usr/libexec/bastinon/bin/python /usr/libexec/bastinon/bin/bastinon-service.py $DBUS_TO_USE
+Environment="BASE_DIR=/var/lib/bastinon"
+Environment="WATCHDOG_INTERVAL=20"
+Environment="LOG_LEVEL=debug"
+ExecStart=/usr/libexec/bastinon/bin/python /usr/libexec/bastinon/bin/bastinon-service.py $DBUS_TO_USE "$BASE_DIR" --watchdog-time $WATCHDOG_INTERVAL --log-level $LOG_LEVEL
 Type=notify
-CapabilityBoundingSet=CAP_AUDIT_WRITE CAP_IPC_LOCK CAP_SYS_NICE
+CapabilityBoundingSet=CAP_AUDIT_WRITE CAP_IPC_LOCK CAP_SYS_NICE CAP_NET_ADMIN CAP_NET_RAW
 NotifyAccess=main
-WatchdogSec=20s
+WatchdogSec=30s
 Restart=on-failure
 StandardOutput=syslog
 StandardError=syslog
