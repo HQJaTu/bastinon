@@ -16,7 +16,7 @@ use NetAddr::IP;
 use Encode;
 
 use constant VERSION => '0.9';
-use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Firewall";
+use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Bastinon";
 
 
 sub _get_dbus() {
