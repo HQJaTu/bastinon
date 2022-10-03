@@ -89,7 +89,7 @@ allow bastinon_t kernel_t:unix_dgram_socket { sendto };
 # D-Bus: Web / CGI
 allow httpd_user_script_t bastinon_t:dbus { send_msg };
 
-# Users?
+# Users, user information, lists of users in the system
 allow bastinon_t sssd_public_t:dir search;
 allow bastinon_t sssd_public_t:file map;
 allow bastinon_t sssd_public_t:file { getattr open read };
@@ -100,5 +100,3 @@ allow bastinon_t proc_net_t:file getattr;
 allow bastinon_t self:rawip_socket { create getopt setopt };
 allow bastinon_t passwd_file_t:file { getattr open read };
 
-# ???
-#allow init_t bastinon_t:dbus send_msg;

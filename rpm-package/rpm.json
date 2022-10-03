@@ -45,9 +45,6 @@
       "- Initial package"
     ],
     "post": [
-      "semanage fcontext -a -t bastinon_exec_t /usr/libexec/bastinon/bin/python",
-      "semanage fcontext -a -t lib_t /usr/libexec/bastinon/lib/",
-      "semanage fcontext -a -t bastinon_var_lib_t /var/lib/bastinon/"
     ]
   },
   "macros": {
