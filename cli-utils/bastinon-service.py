@@ -29,8 +29,8 @@ from gi.repository import GObject  # PyGObject
 from typing import Optional, Tuple
 from periodic import Periodic  # asyncio-periodic
 import signal
-from firewall_updater.rules import ServiceReader
-from firewall_updater import FirewallBase, Iptables, dbus
+from bastinon.rules import ServiceReader
+from bastinon import FirewallBase, Iptables, dbus
 import argparse
 import logging
 

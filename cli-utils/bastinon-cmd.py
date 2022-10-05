@@ -23,8 +23,8 @@ import os
 import sys
 from typing import Optional, Tuple
 import argparse
-from firewall_updater.rules import RuleReader, RuleWriter, ServiceReader, UserRule
-from firewall_updater import FirewallBase, Iptables
+from bastinon.rules import RuleReader, RuleWriter, ServiceReader, UserRule
+from bastinon import FirewallBase, Iptables
 import logging
 
 log = logging.getLogger(__name__)
