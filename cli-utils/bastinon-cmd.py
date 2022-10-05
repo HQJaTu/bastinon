@@ -42,7 +42,7 @@ def _setup_logger(log_level_in: str) -> None:
     log_level = logging._nameToLevel[log_level_in.upper()]
     log.setLevel(log_level)
 
-    lib_log = logging.getLogger('firewall_updater')
+    lib_log = logging.getLogger('bastinon')
     lib_log.setLevel(log_level)
     lib_log.addHandler(console_handler)
 
