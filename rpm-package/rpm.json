@@ -13,8 +13,8 @@
     "license": "GPLv2",
     "name": "Bastinon",
     "summary": "Bastinon - Non-bastion bastion. Toolkit to maintain firewall rules",
-    "version": "0.1.0",
-    "release": "5"
+    "version": "0.2.0",
+    "release": "1"
   },
   "python_venv": {
     "cmd": "python3 -m venv",
@@ -33,6 +33,8 @@
       "Toolkit for remote firewall rules management"
     ],
     "changelog": [
+      "* Mon Oct 03 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.2.0-1",
+      "- Created a proper RPM of SElinux policy",
       "* Sun Oct 02 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.1.0-5",
       "- Updated correct capabilities to Systemd service description",
       "* Sun Oct 02 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.1.0-4",
