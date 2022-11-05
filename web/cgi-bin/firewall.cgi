@@ -303,10 +303,10 @@ __DATA__
     min-height: 300px;
     height: auto;
 }
-#rules_table {
+#user_rules_table, #shared_rules_table {
     min-width: 800px;
 }
-#rules_table th, #rules_table td {
+#user_rules_table th, #user_rules_table td, #shared_rules_table th, #shared_rules_table td {
     border: 1px solid;
 }
 .center_align {
@@ -325,6 +325,7 @@ input:invalid, select:invalid {
 }
 .source_input {
     width: 200px;
+    font-size: 14pt;
 }
 .comment_input {
     width: 300px;
@@ -340,10 +341,14 @@ input:invalid, select:invalid {
 .ip-address_display {
     background-color: #f8f8f8;
     width: 200px;
-    text-align: right;
+    text-align: left;
+    font-size: 18pt;
 }
 .matching-rule {
     background-color: #a4dfa4;
+}
+.service_input {
+    font-size: 12pt;
 }
 footer {
     color: #cccccc;
@@ -361,13 +366,16 @@ footer {
     &nbsp;[a <%= $remote_ip_public_str %>]<br/>
     <span id="network_info"></span>
 </p>
-<div id="rules_table_holder">
+<div id="user_rules_table_holder">
     <h2>... Loading rules ...</h2>
 </div>
 <br/>
 <div id="buttons">
     <button id="reload_rules_btn">Reload rules from server discarding any possible changes</button>
     <button id="rules_into_effect_btn" disabled>Make rules effective</button>
+</div>
+<div id="common_rules_table_holder">
+    <h2>... Loading rules ...</h2>
 </div>
 <script src="../jquery-3.6.0.min.js"></script>
 <script>
@@ -447,18 +455,22 @@ update_rules = () => {
         return;
     }
 
-    const table_div = $('#rules_table_holder');
+    const user_table_div = $('#user_rules_table_holder');
+    const common_table_div = $('#common_rules_table_holder');
     let update_button_ids = ["new"];
 
     // Iterate all rules
-    let html = '';
+    let user_html = '';
+    let shared_html = '';
+    let service_name = null;
     for (const rule of bastinon_rules) {
         const rule_id = rule[0];
         const rule_effective = rule[6] ? "Active" : "inactive";
         let service_opts = '';
         for (const service of bastinon_services) {
             if (service[0] === rule[2]) {
-                service_opts += `<option value="${service[0]}" selected>${service[1]}</option>`;
+                service_name = service[1];
+                service_opts += `<option value="${service[0]}" selected>${service_name}</option>`;
             } else {
                 service_opts += `<option value="${service[0]}">${service[1]}</option>`;;
             }
@@ -466,7 +478,9 @@ update_rules = () => {
         const row_class = rule[7] ? "matching-rule" : "non-matching-rule";
 
         // Go for HTML:
-        html += `<tr class="${row_class}">
+        if (rule[1]) {
+            // Has owner! This is user's rule.
+            user_html += `<tr class="${row_class}">
   <td>
     <form id="rules_form_${rule_id}">
       <select id="service_${rule_id}" required class="service_input">${service_opts}</select>
@@ -481,6 +495,15 @@ update_rules = () => {
     <button id="delete_rule_btn_${rule_id}" form="rules_form_${rule_id}">Delete</button>
   </td>
 </tr>`;
+        } else {
+            shared_html += `<tr class="${row_class}">
+  <td>${service_name}</td>
+  <td>${rule[3]}</td>
+  <td>${rule[4]}</td>
+  <td>${rule[5]}</td>
+  <td class="effective_column">${rule_effective}</td>
+</tr>`;
+        }
 
         // Update-button:
         update_button_ids.push(rule_id)
@@ -492,7 +515,7 @@ update_rules = () => {
     for (const service of bastinon_services) {
         service_opts += `<option value="${service[0]}">${service[1]}</option>`;
     }
-    html += `<tr>
+    user_html += `<tr>
   <td>
     <form id="rules_form_${rule_id}">
       <select id="service_${rule_id}" required class="service_input">${service_opts}</select>
@@ -509,7 +532,9 @@ update_rules = () => {
 </tr>`;
 
     // Re-do the <div/>-contents with a freshly created table
-    table_div.html(`<table id="rules_table">
+    user_table_div.html(`
+<h2>User rules:</h2>
+<table id="user_rules_table">
 <tr>
     <th>Service</th>
     <th>Source address</th>
@@ -518,7 +543,20 @@ update_rules = () => {
     <th>Rule active</th>
     <th>Action</th>
 </tr>
-${html}
+${user_html}
+</table>`);
+    common_table_div.html(`
+<hr/>
+<h2>Rules shared by all users:</h2>
+<table id="shared_rules_table">
+<tr>
+    <th>Service</th>
+    <th>Source address</th>
+    <th>Comment</th>
+    <th>Expiry (UTC)</th>
+    <th>Rule active</th>
+</tr>
+${shared_html}
 </table>`);
 
     // Add values to fields as post-process.
