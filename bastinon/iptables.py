@@ -118,6 +118,22 @@ class Iptables(FirewallBase):
 
         rules_out = []
 
+        def _quote_helper(rule) -> str:
+            """
+            Helper function to add single quote to any argument having a space.
+            Flaw: Won't escape single quote correctly.
+            :param rule:
+            :return: space separated string
+            """
+            parts = []
+            for r in rule:
+                if ' ' in str(r):
+                    parts.append("'{}'".format(str(r)))
+                else:
+                    parts.append(str(r))
+
+            return ' '.join(parts)
+
         for rule in rules:
             service_rules = self._rule_to_ipchain_append(4, rule, with_command=True)
             for rule_out in service_rules:
@@ -126,7 +142,7 @@ class Iptables(FirewallBase):
                     # Ah. Expired already.
                     rule_str = "# "
 
-                rule_str += ' '.join(str(r) for r in rule_out)
+                rule_str += _quote_helper(rule_out)
                 rules_out.append(rule_str)
 
         for rule in rules:
@@ -137,7 +153,7 @@ class Iptables(FirewallBase):
                     # Ah. Expired already.
                     rule_str = "# "
 
-                rule_str += ' '.join(str(r) for r in rule_out)
+                rule_str += _quote_helper(rule_out)
                 rules_out.append(rule_str)
 
         return rules_out

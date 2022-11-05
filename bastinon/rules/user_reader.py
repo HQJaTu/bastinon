@@ -25,17 +25,19 @@ from pwd import getpwnam
 from datetime import datetime
 from .service_reader import ServiceReader
 from .user_rule import UserRule, Service
+from .shared_rule import SharedRule
 import logging
 
 log = logging.getLogger(__name__)
 
 
 class RuleReader:
-    USERS_PATH = r"users"
+    USER_RULE_PATH = r"users"
+    SHARED_RULE_PATH = r"shared"
 
     def __init__(self, rule_path: str,
                  max_ipv4_network_size: int = None, max_ipv6_network_size: int = None):
-        user_rule_path = "{}/{}".format(rule_path, self.USERS_PATH)
+        user_rule_path = "{}/{}".format(rule_path, self.USER_RULE_PATH)
         if not os.path.exists(user_rule_path):
             raise ValueError("Rule path '{}' doesn't exist!".format(user_rule_path))
         if not os.path.isdir(user_rule_path):
@@ -48,7 +50,7 @@ class RuleReader:
         self._max_ipv6_network_size = max_ipv6_network_size
 
     def _rule_filename(self, user: str) -> str:
-        filename = "{}/{}/{}.xml".format(self._path, self.USERS_PATH, user)
+        filename = "{}/{}/{}.xml".format(self._path, self.USER_RULE_PATH, user)
 
         return filename
 
@@ -57,13 +59,16 @@ class RuleReader:
 
         return os.path.exists(filename)
 
-    def read_all_users(self) -> List[UserRule]:
+    def read_all_users(self, read_shared_rules: bool) -> List[UserRule]:
         if not self.all_services:
             reader = ServiceReader(self._path)
             self.all_services = reader.read_all()
 
         all_rules = []
-        user_rules_path = "{}/{}".format(self._path, self.USERS_PATH)
+        user_rules_path = "{}/{}".format(self._path, self.USER_RULE_PATH)
+        shared_rules_path = "{}/{}".format(self._path, self.SHARED_RULE_PATH)
+
+        # Iterate users
         for item in os.listdir(user_rules_path):
             if not item.endswith('.xml'):
                 continue
@@ -79,6 +84,20 @@ class RuleReader:
                 user = unix_user_passwd_record.pw_name
                 rules = self._user_rule_reader(user, xml_file, self.all_services)
                 all_rules.extend(rules)
+
+        # Iterate shared files (if any)
+        if read_shared_rules:
+            log.debug("Shared rules path: {}".format(shared_rules_path))
+            if os.path.exists(shared_rules_path):
+                for item in os.listdir(shared_rules_path):
+                    if not item.endswith('.xml'):
+                        continue
+                    xml_file = os.path.join(shared_rules_path, item)
+                    if os.path.isfile(xml_file):
+                        rules = self._shared_rule_reader(xml_file, self.all_services)
+                        all_rules.extend(rules)
+            else:
+                log.warning("Shared rules directory doesn't exist! Ignoring.")
 
         return all_rules
 
@@ -103,28 +122,57 @@ class RuleReader:
     @staticmethod
     def _user_rule_reader(user: str, user_rules_filename: str, services: Dict[str, Service]) -> List[UserRule]:
         log.debug("For user {}, reading rule file: {}".format(user, user_rules_filename))
-        root = etree.parse(user_rules_filename)
+        return RuleReader._rule_reader(user_rules_filename, services, user=user)
+
+    @staticmethod
+    def _shared_rule_reader(shared_rules_filename: str, services: Dict[str, Service]) -> List[SharedRule]:
+        log.debug("Reading shared rule file: {}".format(shared_rules_filename))
+        shared_name = os.path.basename(shared_rules_filename)
+        return RuleReader._rule_reader(shared_rules_filename, services, shared=shared_name)
+
+    @staticmethod
+    def _rule_reader(rules_filename: str, services: Dict[str, Service],
+                     user: str = None, shared: str = None) -> List[Union[UserRule, SharedRule]]:
+        # log.debug("Reading rule file: {}".format(rules_filename))
+        root = etree.parse(rules_filename)
         schema_filename = "{}/xml-schemas/user_rule.xsd".format(sys.prefix)
         schema_doc = etree.parse(schema_filename)
         schema = etree.XMLSchema(schema_doc)
         if not schema.validate(root):
             raise ValueError("Rule-XML {} is not valid according to XSD file {}! Error: {}".format(
-                user_rules_filename, schema_filename, schema.error_log))
+                rules_filename, schema_filename, schema.error_log))
 
         rules = []
         for zone_elem in root.iter(tag="zone"):
             service_elems = zone_elem.iter(tag="service")
             for service_elem in service_elems:
                 if 'name' not in service_elem.attrib:
-                    raise ValueError('Rule definition, service needs to have name! User: {}'.format(user))
+                    if user:
+                        raise ValueError('Rule definition, service needs to have name! User: {}'.format(user))
+                    if shared:
+                        raise ValueError('Rule definition, service needs to have name! Shared: {}'.format(shared))
+                    raise ValueError('Rule definition, service needs to have name!')
+
                 service_name = service_elem.attrib['name']
                 if service_name not in services:
-                    raise ValueError("Rule definition, service is unknown '{}'! User: {}".format(service_name, user))
+                    if user:
+                        raise ValueError(
+                            "Rule definition, service is unknown '{}'! User: {}".format(service_name, user))
+                    if shared:
+                        raise ValueError(
+                            "Rule definition, service is unknown '{}'! Shared: {}".format(service_name, shared))
+                    raise ValueError("Rule definition, service is unknown '{}'!".format(service_name))
+
                 service = services[service_name]
                 source_elems = zone_elem.iter(tag="source")
                 for source_elem in source_elems:
                     if 'address' not in source_elem.attrib:
-                        raise ValueError('Rule definition, service needs to have name! User: {}'.format(user))
+                        if user:
+                            raise ValueError('Rule definition, service needs to have name! User: {}'.format(user))
+                        if shared:
+                            raise ValueError('Rule definition, service needs to have name! Shared: {}'.format(shared))
+                        raise ValueError('Rule definition, service needs to have name!')
+
                     # Source address:
                     source = source_elem.attrib['address']
 
@@ -146,7 +194,13 @@ class RuleReader:
                     else:
                         comment = None
 
-                    rule = UserRule(user, service, source, expiry, comment)
+                    if user:
+                        rule = UserRule(user, service, source, expiry, comment)
+                    elif shared:
+                        rule = SharedRule(service, source, expiry, comment)
+                    else:
+                        raise ValueError("Internal: What!?")
+
                     rules.append(rule)
 
         return rules

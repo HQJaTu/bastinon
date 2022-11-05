@@ -24,7 +24,7 @@ from pwd import getpwuid, getpwnam
 from datetime import datetime
 from hashlib import sha256
 from ..base.firewall_base import FirewallBase
-from ..rules import RuleReader, RuleWriter, ServiceReader, UserRule
+from ..rules import RuleReader, RuleWriter, ServiceReader, UserRule, SharedRule
 import logging
 
 log = logging.getLogger(__name__)
@@ -196,16 +196,20 @@ class FirewallUpdaterService(service.Object):
             user_id, user_login, user_full_name = (None, '-all-', 'All Users')
 
         reader = RuleReader(self._firewall_rules_path)
-        rules = reader.read_all_users()
+        rules = reader.read_all_users(read_shared_rules=True)
         active_rules = self._firewall.query(rules)
 
-        def _rule_tuple_helper(r: Tuple[UserRule, bool]) -> tuple:
+        def _rule_tuple_helper(r: Tuple[Union[UserRule, SharedRule], bool]) -> tuple:
             # Notes:
             # - Source address will be converted into a string
             # - Comment is either str or bool, D-Bus cannot return None
             # - Expiry is either str or bool, D-Bus cannot return None
 
             rule_hash = self._rule_hash(r[0])
+            if isinstance(r[0], UserRule):
+                owner = r[0].owner
+            else:
+                owner = ""
             source = str(r[0].source)
             if r[0].comment:
                 comment = r[0].comment
@@ -218,7 +222,7 @@ class FirewallUpdaterService(service.Object):
             else:
                 expiry = False
 
-            return rule_hash, r[0].owner, r[0].service.code, source, comment, expiry, r[1]
+            return rule_hash, owner, r[0].service.code, source, comment, expiry, r[1]
 
         # Rules
         rules_out = []
@@ -227,8 +231,9 @@ class FirewallUpdaterService(service.Object):
             #           user,prot,port,src, comment,          expiry,   active
             # r = Tuple[str, str, int, str, Union[str, None], datetime, bool]
             for r in active_rules:
-                if r[0].owner != user:
-                    continue
+                if isinstance(r[0], UserRule):
+                    if r[0].owner != user:
+                        continue
                 rule = _rule_tuple_helper(r)
                 rules_out.append(rule)
         else:
@@ -383,7 +388,7 @@ class FirewallUpdaterService(service.Object):
         :return: True = updates needed, False = all ok, no updates needed
         """
         reader = RuleReader(self._firewall_rules_path)
-        rules = reader.read_all_users()
+        rules = reader.read_all_users(read_shared_rules=False)
 
         # Test the newly read rules
         updates_needed = self._firewall.needs_update(rules)
@@ -405,7 +410,7 @@ class FirewallUpdaterService(service.Object):
         :return: True = updates needed, False = all ok, no updates needed
         """
         reader = RuleReader(self._firewall_rules_path)
-        rules = reader.read_all_users()
+        rules = reader.read_all_users(read_shared_rules=True)
 
         # Test the newly read rules
         self._firewall.set(rules)

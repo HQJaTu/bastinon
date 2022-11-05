@@ -49,13 +49,13 @@ def _setup_logger(log_level_in: str) -> None:
 
 def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None:
     reader = RuleReader(rules_path)
-    rules = reader.read_all_users()
+    rules = reader.read_all_users(read_shared_rules=True)
 
     # Test the newly read rules
     log.info("Human-readable rules:")
     rules_str = rule_engine.query_readable(rules)
-    from pprint import pprint
-    pprint(rules_str)
+    for rule in rules_str:
+        print(rule)
 
     if False:
         # UserRules as strings
@@ -65,7 +65,7 @@ def read_rules_for_all_users(rule_engine: FirewallBase, rules_path: str) -> None
 
 def read_active_rules_from_firewall(rule_engine: FirewallBase, rules_path: str) -> None:
     reader = RuleReader(rules_path)
-    rules = reader.read_all_users()
+    rules = reader.read_all_users(read_shared_rules=True)
     user_rules = rule_engine.query(rules)
 
     log.info("Requested rules ({}):".format(len(user_rules)))
@@ -82,7 +82,7 @@ def read_active_rules_from_firewall(rule_engine: FirewallBase, rules_path: str) 
 
 def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
     reader = RuleReader(rules_path)
-    rules = reader.read_all_users()
+    rules = reader.read_all_users(read_shared_rules=True)
 
     # Test the newly read rules
     if rule_engine.needs_update(rules):
@@ -93,7 +93,7 @@ def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
 
 def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bool, forced: bool) -> None:
     reader = RuleReader(rules_path)
-    rules = reader.read_all_users()
+    rules = reader.read_all_users(read_shared_rules=True)
 
     # Test the newly read rules
     log.info("Changes:")
@@ -135,18 +135,29 @@ class NegateAction(argparse.Action):
     """
     Argparse helper
     """
+
     def __call__(self, parser, ns, values, option):
         setattr(ns, self.dest, option[2:5] != 'non')
 
 
 def main() -> None:
+    RULE_COMMAND_PRINT_ALL = "print-all"
+    RULE_COMMAND_ENFORCE = "enforce"
+    RULE_COMMANDS = [RULE_COMMAND_PRINT_ALL, RULE_COMMAND_ENFORCE]
+
+    DEFAULT_IPTABLES_CHAIN_NAME = "Friends-Firewall-INPUT"
+
     parser = argparse.ArgumentParser(description='Firewall Updates daemon')
     parser.add_argument("rule_path", metavar="RULE-PATH",
                         help="User's firewall rules base directory")
+    parser.add_argument("rule_command", metavar="RULE-COMMAND",
+                        help="Command: {}".format(', '.join(RULE_COMMANDS)))
     parser.add_argument("--user",
                         help="(optional) Update rules for single user")
     parser.add_argument('--log-level', default="WARNING",
                         help='Set logging level. Python default is: WARNING')
+    parser.add_argument('--iptables-chain', default=DEFAULT_IPTABLES_CHAIN_NAME,
+                        help="IPtables-mode. Chain name. Default: {}".format(DEFAULT_IPTABLES_CHAIN_NAME))
     parser.add_argument('--stateful', '--non-stateful', dest='stateful',
                         action=NegateAction, nargs=0,
                         default=True,
@@ -174,12 +185,17 @@ def main() -> None:
         exit(0)
 
     reader = ServiceReader(args.rule_path)
-    iptables_firewall = Iptables(reader.read_all(), "Friends-Firewall-INPUT", args.stateful)
+    iptables_firewall = Iptables(reader.read_all(), args.iptables_chain, args.stateful)
 
-    # read_rules_for_all_users(iptables_firewall, args.rule_path)
-    # read_active_rules_from_firewall(iptables_firewall, args.rule_path)
-    # rules_need_update(iptables_firewall, args.rule_path)
-    rules_enforcement(iptables_firewall, args.rule_path, simulation=True, forced=args.force)
+    command = args.rule_command.lower()
+    if command == RULE_COMMAND_PRINT_ALL:
+        read_rules_for_all_users(iptables_firewall, args.rule_path)
+    elif command == RULE_COMMAND_ENFORCE:
+        # read_active_rules_from_firewall(iptables_firewall, args.rule_path)
+        # rules_need_update(iptables_firewall, args.rule_path)
+        rules_enforcement(iptables_firewall, args.rule_path, simulation=True, forced=args.force)
+    else:
+        log.error("Unknown rule-command '{}'!".format(args.rule_command))
 
 
 if __name__ == "__main__":
