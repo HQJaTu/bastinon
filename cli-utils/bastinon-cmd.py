@@ -92,25 +92,37 @@ def rules_need_update(rule_engine: FirewallBase, rules_path: str) -> None:
 
 
 def rules_enforcement(rule_engine: FirewallBase, rules_path: str, simulation: bool, forced: bool) -> None:
+    """
+    Enforce firewall rules
+    :param rule_engine: object, The chosen firewall engine to be used for rule enforcement
+    :param rules_path: string, Path to Bastinon rules directory
+    :param simulation: bool, True = don't actually enforce but display what needs to be done, False = do it!
+    :param forced: bool, True = don't try to synchronize nor deduce minimal effort, drop all and recreate
+    :return: None
+    """
     reader = RuleReader(rules_path)
     rules = reader.read_all_users(read_shared_rules=True)
 
     # Test the newly read rules
-    log.info("Changes:")
     changes = rule_engine.simulate(rules, forced)
 
     if not changes:
         log.info("All ok, no changes")
+        print("All ok, no changes")
     else:
-        from pprint import pprint
-        pprint(changes)
+        log.info("Enforcement: {} changes in rules".format(len(changes)))
+        print("Enforcement: {} changes in rules".format(len(changes)))
+        for idx, rule in enumerate(changes):
+            log.info("{0:3d}) {1}".format(idx + 1, rule))
 
         if not simulation:
             log.warning("Proceed with changes:")
             rule_engine.set(rules, forced)
             log.info("Changes done!")
+            print("Changes done!")
         else:
-            log.info("Simulation. Won't proceed with changes:")
+            log.info("Simulation. Won't proceed with changes.")
+            print("Simulation. Won't proceed with changes.")
 
 
 def add_rule(user: str, service_code: str, source: str, comment: str, rules_path: str) -> None:
@@ -133,7 +145,7 @@ def add_rule(user: str, service_code: str, source: str, comment: str, rules_path
 
 class NegateAction(argparse.Action):
     """
-    Argparse helper
+    Argparse helper to enable --toggle / --no-toggle
     """
 
     def __call__(self, parser, ns, values, option):
@@ -162,6 +174,10 @@ def main() -> None:
                         action=NegateAction, nargs=0,
                         default=True,
                         help="Do not use stateful TCP firewall. Default: use stateful")
+    parser.add_argument('--simulate', '--no-simulate', dest='simulate',
+                        action=NegateAction, nargs=0,
+                        default=False,
+                        help="Simulate what needs to be done to enforce rules. Default: Not simulated.")
     parser.add_argument('--force', action='store_true',
                         default=False,
                         help="Force firewall update")
@@ -193,7 +209,7 @@ def main() -> None:
     elif command == RULE_COMMAND_ENFORCE:
         # read_active_rules_from_firewall(iptables_firewall, args.rule_path)
         # rules_need_update(iptables_firewall, args.rule_path)
-        rules_enforcement(iptables_firewall, args.rule_path, simulation=True, forced=args.force)
+        rules_enforcement(iptables_firewall, args.rule_path, simulation=args.simulate, forced=args.force)
     else:
         log.error("Unknown rule-command '{}'!".format(args.rule_command))
 
