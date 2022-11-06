@@ -34,7 +34,7 @@
     ],
     "changelog": [
       "* Sun Nov 06 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.3.1-1",
-      "- Improvements on CLI rule enforcement",
+      "- Improvements and fixes on CLI rule enforcement",
       "* Sat Nov 05 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.3.0-1",
       "- Introduced common firewall rules",
       "* Mon Oct 03 2022 Jari Turkia <jatu@hqcodeshop.fi> - 0.2.0-1",

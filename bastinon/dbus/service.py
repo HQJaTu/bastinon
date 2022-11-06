@@ -388,7 +388,7 @@ class FirewallUpdaterService(service.Object):
         :return: True = updates needed, False = all ok, no updates needed
         """
         reader = RuleReader(self._firewall_rules_path)
-        rules = reader.read_all_users(read_shared_rules=False)
+        rules = reader.read_all_users(read_shared_rules=True)
 
         # Test the newly read rules
         updates_needed = self._firewall.needs_update(rules)

@@ -23,9 +23,9 @@ import shutil
 from typing import Tuple, Optional, Union, List, Any, Dict
 import re
 import ipaddress
-from datetime import datetime
+from abc import ABC, abstractmethod
 from .base import FirewallBase
-from .rules import ServiceReader, Rule, UserRule, FirewallRule, Service
+from .rules import Rule, UserRule, SharedRule, FirewallRule, Service
 import logging
 
 log = logging.getLogger(__name__)
@@ -40,16 +40,44 @@ class IptablesRule(FirewallRule):
         self.expiry = None
 
 
-class MatchedIptablesRule(UserRule):
+class MatchedIptablesRule(ABC):
+
+    def __init__(self, rule_number_in_chain: int, **kwargs):
+        super().__init__(**kwargs)  # forwards all unused arguments
+        self.rule_number_in_chain = rule_number_in_chain
+
+    @abstractmethod
+    def __str__(self) -> str:
+        raise NotImplementedError("Abstract class!")
+
+
+class MatchedIptablesUserRule(MatchedIptablesRule, UserRule):
 
     def __init__(self, rule_number_in_chain: int, user_rule: UserRule):
-        super().__init__(user_rule.owner, user_rule.service, user_rule.source_address,
+        super().__init__(rule_number_in_chain=rule_number_in_chain,
+                         owner=user_rule.owner, service=user_rule.service,
+                         source_address=user_rule.source_address,
                          expiry=user_rule.expiry, comment=user_rule.comment)
-        self.rule_number_in_chain = rule_number_in_chain
 
     def __str__(self) -> str:
         return "User {} iptables IPv{} rule {}: {} allowed from {}".format(
             self.owner,
+            self.source_address_family,
+            self.rule_number_in_chain,
+            self.service, self.source
+        )
+
+
+class MatchedIptablesSharedRule(MatchedIptablesRule, SharedRule):
+
+    def __init__(self, rule_number_in_chain: int, user_rule: SharedRule):
+        super().__init__(rule_number_in_chain=rule_number_in_chain,
+                         service=user_rule.service,
+                         source_address=user_rule.source_address,
+                         expiry=user_rule.expiry, comment=user_rule.comment)
+
+    def __str__(self) -> str:
+        return "Shared iptables IPv{} rule {}: {} allowed from {}".format(
             self.source_address_family,
             self.rule_number_in_chain,
             self.service, self.source
@@ -368,7 +396,12 @@ class Iptables(FirewallBase):
                     if idx in matched_rules and not matched_rules[idx]:
                         # A service can contain multiple protocols and ports.
                         # Append to list only if user rule not matched already.
-                        matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
+                        if isinstance(rule, UserRule):
+                            matched_rule = MatchedIptablesUserRule(active_rule.rule_number_in_chain, rule)
+                        elif isinstance(rule, SharedRule):
+                            matched_rule = MatchedIptablesSharedRule(active_rule.rule_number_in_chain, rule)
+                        else:
+                            raise RuntimeError("Internal error! Don't know how to handle IPv4 rule class.")
                         ipv4_rules_matched.append(matched_rule)
                         # XXX Debug noise:
                         # log.debug("Matched IPv4 rule: '{}'!".format(matched_rule))
@@ -396,7 +429,12 @@ class Iptables(FirewallBase):
                     if idx in matched_rules and not matched_rules[idx]:
                         # A service can contain multiple protocols and ports.
                         # Append to list only if user rule not matched already.
-                        matched_rule = MatchedIptablesRule(active_rule.rule_number_in_chain, rule)
+                        if isinstance(rule, UserRule):
+                            matched_rule = MatchedIptablesUserRule(active_rule.rule_number_in_chain, rule)
+                        elif isinstance(rule, SharedRule):
+                            matched_rule = MatchedIptablesSharedRule(active_rule.rule_number_in_chain, rule)
+                        else:
+                            raise RuntimeError("Internal error! Don't know how to handle IPv6 rule class.")
                         ipv6_rules_matched.append(matched_rule)
                         # XXX Debug noise:
                         # log.debug("Matched IPv6 rule: '{}'!".format(matched_rule))
