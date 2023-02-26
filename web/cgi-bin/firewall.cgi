@@ -35,6 +35,7 @@ sub _get_dbus() {
 }
 
 sub _post_process_rules(\@$) {
+    # For D-bus received rules, add boolean flag for $remote_ip match at end of array
     my ($rules_ref, $remote_ip) = @_;
 
     my $remote_ip_family = 0;
@@ -100,6 +101,7 @@ get '/' => sub {
 };
 
 get '/api/remote/network' => sub {
+    # Query the status of current IP-address and network information
     my ($c) = @_;
 
     my $remote_ip = $c->tx->remote_address;
@@ -135,6 +137,7 @@ get '/api/remote/network' => sub {
 };
 
 get '/api/services' => sub {
+    # Get a list of known firewall services for drop-downs
     my ($c) = @_;
 
     my $manager = _get_dbus();
@@ -161,6 +164,16 @@ get '/api/protocols' => sub {
 };
 
 get '/api/rules' => sub {
+    # List of global and user's rules
+    # Single rule as received from D-bus:
+    # 0: ID of a rule
+    # 1: User ID of a rule, empty if global rule
+    # 2: Service
+    # 3: IP-address of the rule
+    # 4: Description of a rule
+    # 5: Expiry datetime of a rule
+    # 6: (bool) Rule is in effect
+    # 7: (bool) Rule matches current source as determined in _post_process_rules(), this data is not from D-bus
     my ($c) = @_;
 
     my $manager = _get_dbus();
@@ -382,7 +395,7 @@ footer {
 let bastinon_services = null;
 let bastinon_rules = null;
 let bastinon_rule_load_time = null;
-const bastinon_rule_expiry_time = 3600; // Seconds
+const bastinon_rule_expiry_time = 600; // Seconds, see on("visibilitychange")
 let bastinon_needs_updating = false;
 
 $(document).ready(() => {
@@ -420,10 +433,13 @@ $(document).ready(() => {
 $(document).on("visibilitychange", (ev) => {
     //console.log(`Visibility changed: ${document.visibilityState}`);
     if (document.visibilityState === 'visible') {
+        // Current window / tab become visible by user action.
+        // If previous results are visible and seem expired, reload.
         if (bastinon_rule_load_time) {
             const last_load_time_diff = new Date(Date.now()) - bastinon_rule_load_time;
             if (last_load_time_diff > bastinon_rule_expiry_time * 1000) {
                 load_rules(true);
+                network_information();
             }
         }
     }
