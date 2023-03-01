@@ -400,13 +400,15 @@ let bastinon_needs_updating = false;
 
 $(document).ready(() => {
     console.log( `ready! <%= $base_url %>` );
+    const api_services_url = _url_builder('/api/services');
+    console.log( `loading from: ${api_services_url}` );
 
     // Get rules:
     load_rules(true);
 
     // Get all available firewall services:
     $.ajax({
-        url: `${window.location.href}/api/services`,
+        url: api_services_url,
         method: 'get',
         context: document.body
     }).done((data) => {
@@ -445,10 +447,21 @@ $(document).on("visibilitychange", (ev) => {
     }
 });
 
+_url_builder = (add_path) => {
+    const parsed_url = new URL(window.location.href);
+    const port = parsed_url.port === "" ? parsed_url.protocol === "https:" ? 443 : parsed_url.protocol === "http:" ? 80 : 0 : parsed_url.port;
+    const path = parsed_url.pathname === "" ? "" : parsed_url.pathname;
+    const firewall_base_url = `${parsed_url.protocol}//${parsed_url.hostname}:${port}${path}`;
+
+    return `${firewall_base_url}${add_path}`
+}
+
 load_rules = (update_ui) => {
+    const api_rules_url = _url_builder('/api/rules');
+
     // Docs: https://api.jquery.com/jquery.ajax/
     $.ajax({
-        url: `${window.location.href}/api/rules`,
+        url: api_rules_url,
         method: 'get',
         context: document.body
     }).done((data) => {
@@ -653,8 +666,10 @@ upsert_rule = (rule_id, service, source, comment, expiry) => {
     }
 
     const rule_id_to_use = rule_id === "new" ? "" : rule_id;
+    const api_rules_url = _url_builder(`/api/rules/${rule_id_to_use}`);
+
     $.ajax({
-        url: `${window.location.href}/api/rules/${rule_id_to_use}`,
+        url: api_rules_url,
         method: rule_id_to_use ? 'put' : 'post',
         context: document.body,
         data: JSON.stringify({
@@ -684,8 +699,9 @@ upsert_rule = (rule_id, service, source, comment, expiry) => {
 }
 
 delete_rule = (rule_id) => {
+    const api_rules_url = _url_builder(`/api/rules/${rule_id}`);
     $.ajax({
-        url: `${window.location.href}/api/rules/${rule_id}`,
+        url: api_rules_url,
         method: 'delete',
         context: document.body
     }).done((data) => {
@@ -700,8 +716,9 @@ delete_rule = (rule_id) => {
 }
 
 query_firewall_status = () => {
+    const api_status_url = _url_builder('/api/firewall/status');
     $.ajax({
-        url: `${window.location.href}/api/firewall/status`,
+        url: api_status_url,
         method: 'get',
         context: document.body
     }).done((data) => {
@@ -723,8 +740,9 @@ query_firewall_status = () => {
 }
 
 rules_into_effect = () => {
+    const api_status_url = _url_builder('/api/firewall/update');
     $.ajax({
-        url: `${window.location.href}/api/firewall/update`,
+        url: api_status_url,
         method: 'put',
         context: document.body
     }).done((data) => {
@@ -740,8 +758,9 @@ rules_into_effect = () => {
 network_information = () => {
     // Mostly for public networks: Query for if network information was possibly available.
     // Make sure originating IP-address will be updated in any case.
+    const api_network_url = _url_builder('/api/remote/network');
     $.ajax({
-        url: `${window.location.href}/api/remote/network`,
+        url: api_network_url,
         method: 'get',
         context: document.body
     }).done((data) => {
