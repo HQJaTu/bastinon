@@ -11,11 +11,12 @@ use Mojo::HTTPStatus qw(OK MOVED_PERMANENTLY FOUND SEE_OTHER FORBIDDEN NOT_FOUND
 use Mojo::JSON qw(decode_json encode_json);
 use Net::DBus;
 use Net::Whois::IP qw(whoisip_query);
-use Data::Validate::IP qw(is_ipv4 is_ipv6 is_public_ip);
-use NetAddr::IP;
+use Data::Validate::IP qw(is_public_ip);
+use Net::IP qw(Error Errno ip_is_ipv4 ip_is_ipv6 ip_get_version ip_compress_address
+    $IP_NO_OVERLAP $IP_PARTIAL_OVERLAP $IP_A_IN_B_OVERLAP $IP_B_IN_A_OVERLAP $IP_IDENTICAL);
 use Encode;
 
-use constant VERSION => '0.9';
+use constant VERSION => '0.9.1';
 use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Bastinon";
 
 
@@ -41,8 +42,8 @@ sub _post_process_rules(\@$) {
     my $remote_ip_family = 0;
     my $remote_ip_object;
     if ($remote_ip) {
-        $remote_ip_family = is_ipv4($remote_ip) ? 4 : is_ipv6($remote_ip) ? 6 : 0;
-        $remote_ip_object = NetAddr::IP->new($remote_ip);
+        $remote_ip_object = new Net::IP($remote_ip);
+        $remote_ip_family = ip_get_version($remote_ip_object->ip());
     }
     # Post-process:
     # D-Bus uses internally only UTF-8. Characters arriving into Perl won't be correctly decoded.
@@ -50,17 +51,16 @@ sub _post_process_rules(\@$) {
     for my $rule_idx (0 .. $#{$rules_ref}) {
         # Do some source matching
         my $source = $rules_ref->[$rule_idx][3];
-        my $source_space = NetAddr::IP->new($source);
-        # As source and source_space can be a network, we MUST provide is_ipv4() an address.
-        my $source_ip_family = is_ipv4($source_space->addr) ? 4 : is_ipv6($source_space->addr) ? 6 : 0;
+        my $source_space = new Net::IP($source);
+        my $source_ip_family = ip_get_version($remote_ip_object->ip());
         my $source_match = 0;
         if ($remote_ip_family == 4 && $source_ip_family == 4) {
-            if ($source_space->contains($remote_ip_object)) {
+            if ($source_space->overlaps($remote_ip_object) != $IP_NO_OVERLAP) {
                 $source_match = 1;
             }
         }
         elsif ($remote_ip_family == 6 && $source_ip_family == 6) {
-            if ($source_space->contains($remote_ip_object)) {
+            if ($source_space->overlaps($remote_ip_object) != $IP_NO_OVERLAP) {
                 $source_match = 1;
             }
         }
@@ -74,6 +74,17 @@ sub _post_process_rules(\@$) {
     }
 }
 
+sub _get_remote_ip($)
+{
+    my ($c) = @_;
+
+    my $remote_ip = $c->tx->remote_address;
+    # XXX testing / development
+    #$remote_ip = "192.0.2.254";
+
+    return $remote_ip;
+}
+
 get '/' => sub {
     my ($c) = @_;
 
@@ -83,8 +94,9 @@ get '/' => sub {
     }
     my ($name, $passwd, $uid, $gid, $quota, $comment, $gcos, $dir, $shell, $expire) = getpwnam($requesting_user);
     my ($user_name, $_) = split(/,/, $gcos, 2); # Assume first comma-separated field of GECOS is user's full name.
-    my $remote_ip = $c->tx->remote_address;
-    my $remote_ip_family = is_ipv4($remote_ip) ? 4 : is_ipv6($remote_ip) ? 6 : 0;
+    my $remote_ip = _get_remote_ip($c);
+    my $remote_ip_object = new Net::IP($remote_ip);
+    my $remote_ip_family = ip_get_version($remote_ip_object->ip());
     my $remote_ip_is_public = is_public_ip($remote_ip);
 
     # Data to be stashed for later use in HTML-template:
@@ -104,7 +116,8 @@ get '/api/remote/network' => sub {
     # Query the status of current IP-address and network information
     my ($c) = @_;
 
-    my $remote_ip = $c->tx->remote_address;
+    my $remote_ip = _get_remote_ip($c);
+    my $remote_ip_object = new Net::IP($remote_ip);
     my $remote_ip_is_public = is_public_ip($remote_ip);
     my $success = \0; # Perl JSON -trickery, will convert 0 to False and 1 to True
     my $remote_network = undef;
@@ -116,7 +129,29 @@ get '/api/remote/network' => sub {
 
         $remote_ip_is_public = \1;
         $success = \1;
-        $remote_network = $response->{'route'};
+
+        # IP-range
+        # We're pretty much guaranteed to get a route.
+        if (ip_is_ipv4($remote_ip_object->ip())) {
+            $remote_network = $response->{'route'};
+            if ($response->{'inetnum'}) {
+                my $improved_remote_network = new Net::IP($response->{'inetnum'});
+                if ($improved_remote_network) {
+                    $remote_network = sprintf("%s/%d", $improved_remote_network->ip(), $improved_remote_network->prefixlen());
+                }
+            }
+        } elsif (ip_is_ipv6($remote_ip_object->ip())) {
+            $remote_network = $response->{'route6'};
+            if ($response->{'inet6num'}) {
+                my $improved_remote_network = new Net::IP($response->{'inet6num'});
+                if ($improved_remote_network) {
+                    $remote_network = sprintf("%s/%d", ip_compress_address($improved_remote_network->ip(), 6),
+                        $improved_remote_network->prefixlen());
+                }
+            }
+        }
+
+        # Organization name:
         $remote_org_name = $response->{'org-name'};
         $remote_org_name = $response->{'netname'} if (!$remote_org_name);
     }
@@ -179,7 +214,7 @@ get '/api/rules' => sub {
     my $manager = _get_dbus();
     my $user = getpwuid($<);
     my @rules = @{$manager->GetRules($user)};
-    my $remote_ip = $c->tx->remote_address;
+    my $remote_ip = _get_remote_ip($c);
     _post_process_rules(@rules, $remote_ip);
 
     # Return
@@ -205,7 +240,7 @@ sub _post_or_put {
     # Docs: https://restfulapi.net/rest-put-vs-post/
     my ($c) = @_;
 
-    my $remote_ip = $c->tx->remote_address;
+    my $remote_ip = _get_remote_ip($c);
     my $rule_id = $c->param('id');
     my $body_json = decode_json($c->req->body);
     my $manager = _get_dbus();
@@ -254,7 +289,7 @@ del '/api/rules/:id' => sub {
     # Docs: https://restfulapi.net/rest-put-vs-post/
     my ($c) = @_;
 
-    my $remote_ip = $c->tx->remote_address;
+    my $remote_ip = _get_remote_ip($c);
     my $rule_id = $c->param('id');
     my $manager = _get_dbus();
     my $user = getpwuid($<);
@@ -353,7 +388,7 @@ input:invalid, select:invalid {
 }
 .ip-address_display {
     background-color: #f8f8f8;
-    width: 200px;
+    width: 250px;
     text-align: left;
     font-size: 18pt;
 }
