@@ -448,12 +448,15 @@ $(document).on("visibilitychange", (ev) => {
 });
 
 _url_builder = (add_path) => {
+    // Make sure any possible junk (query string or hash) is dropped.
     const parsed_url = new URL(window.location.href);
     const port = parsed_url.port === "" ? parsed_url.protocol === "https:" ? 443 : parsed_url.protocol === "http:" ? 80 : 0 : parsed_url.port;
     const path = parsed_url.pathname === "" ? "" : parsed_url.pathname;
-    const firewall_base_url = `${parsed_url.protocol}//${parsed_url.hostname}:${port}${path}`;
+    const firewall_base_url = `${parsed_url.protocol}//${parsed_url.hostname}:${port}`;
 
-    return `${firewall_base_url}${add_path}`
+    const new_url = new URL(`${path}${add_path}`, firewall_base_url);
+
+    return new_url.href;
 }
 
 load_rules = (update_ui) => {
