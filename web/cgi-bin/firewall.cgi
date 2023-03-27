@@ -16,7 +16,7 @@ use Net::IP qw(Error Errno ip_is_ipv4 ip_is_ipv6 ip_get_version ip_compress_addr
     $IP_NO_OVERLAP $IP_PARTIAL_OVERLAP $IP_A_IN_B_OVERLAP $IP_B_IN_A_OVERLAP $IP_IDENTICAL);
 use Encode;
 
-use constant VERSION => '0.9.1';
+use constant VERSION => '0.9.2';
 use constant FIREWALL_UPDATER_SERVICE_BUS_NAME => "fi.hqcodeshop.Bastinon";
 
 
@@ -166,7 +166,8 @@ get '/api/remote/network' => sub {
         remote_ip           => $remote_ip,
         query_done          => $success,
         remote_network      => $remote_network,
-        remote_org_name     => $remote_org_name
+        remote_org_name     => $remote_org_name,
+        timestamp           => time()
     };
     $c->render(json => $json, status => OK);
 };
@@ -318,7 +319,8 @@ get '/api/firewall/status' => sub {
     # Return
     # Note: Perl needs bit of JSON-trickery to return boolean values
     my $json = {
-        "updates_needed" => $updates_needed ? \1 : \0
+        "updates_needed" => $updates_needed ? \1 : \0,
+        timestamp        => time()
     };
     $c->render(json => $json, status => OK);
 };
@@ -407,12 +409,12 @@ footer {
 
 <body>
 <h1>Firewall Rules</h1>
-<p>Hello <%= $name %></p>
+<p>Hello <%= $name %> !</p>
 <p>
     Your request originates from:
     <input type="text" value="<%= $remote_ip %>" readonly id="ip-address" class="ip-address_display" />
     &nbsp;[a <%= $remote_ip_public_str %>]<br/>
-    <span id="network_info"></span>
+    <span id="network_info"></span>. Information last updated at: <span id="network-info-updated-time"></span>
 </p>
 <div id="user_rules_table_holder">
     <h2>... Loading rules ...</h2>
@@ -817,6 +819,10 @@ network_information = () => {
 
         // Update IP-address
         $("#ip-address").val(data["remote_ip"]);
+
+        // Update last updated timestamp
+        const timestamp = new Date(data["timestamp"] * 1000);
+        $("#network-info-updated-time").text(timestamp);
 
         update_rules();
     });
